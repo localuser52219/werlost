@@ -3,6 +3,7 @@
 
 let room = null;
 let players = [];
+let pollTimer = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -40,23 +41,30 @@ async function joinViewer() {
   }
   room = r;
 
+  await reloadPlayers();
+
+  s.textContent = `房間 ${room.code}｜地圖 ${room.map_size}×${room.map_size}`;
+  drawMap();
+  setupRealtimeViewer();
+  setupPolling();
+}
+
+// 從 DB 重新讀取玩家列表
+async function reloadPlayers() {
+  if (!room) return;
   const { data: ps, error: ep } = await window._supabase
     .from("players")
     .select("*")
     .eq("room_id", room.id);
 
   if (ep) {
-    s.textContent = "讀取玩家失敗";
-    console.error(ep);
+    console.error("讀取玩家失敗", ep);
     return;
   }
   players = ps || [];
-
-  s.textContent = `房間 ${room.code}｜地圖 ${room.map_size}×${room.map_size}`;
-  drawMap();
-  setupRealtimeViewer();
 }
 
+// 繪製整張地圖 + 玩家
 function drawMap() {
   if (!room) return;
   const cvs = document.getElementById("mapCanvas");
@@ -84,13 +92,18 @@ function drawMap() {
   }
 
   // players
-  players.forEach(p => {
+  players.forEach((p) => {
     if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
-    ctx.fillStyle = p.role === "A" ? "red" : "blue";
+    // A = 紅，B = 藍，其它角色用灰色
+    if (p.role === "A") ctx.fillStyle = "red";
+    else if (p.role === "B") ctx.fillStyle = "blue";
+    else ctx.fillStyle = "gray";
+
     ctx.fillRect(p.x * cell + 2, p.y * cell + 2, cell - 4, cell - 4);
   });
 }
 
+// Realtime 監聽 players INSERT / UPDATE
 function setupRealtimeViewer() {
   if (!room) return;
 
@@ -99,14 +112,18 @@ function setupRealtimeViewer() {
     .on(
       "postgres_changes",
       {
-        event: "UPDATE",
+        event: "*", // INSERT / UPDATE / DELETE 全部聽
         schema: "public",
         table: "players",
         filter: `room_id=eq.${room.id}`
       },
-      payload => {
+      (payload) => {
         const row = payload.new;
-        const idx = players.findIndex(p => p.id === row.id);
+        if (!row) {
+          // DELETE 的情況，可視需要再處理
+          return;
+        }
+        const idx = players.findIndex((p) => p.id === row.id);
         if (idx >= 0) {
           players[idx] = row;
         } else {
@@ -115,5 +132,19 @@ function setupRealtimeViewer() {
         drawMap();
       }
     )
-    .subscribe();
+    .subscribe((status) => {
+      console.log("Viewer Realtime status:", status);
+    });
+}
+
+// 保險輪詢：每 1 秒重新讀取 players，避免 Realtime 掉線
+function setupPolling() {
+  if (pollTimer) {
+    clearInterval(pollTimer);
+  }
+  pollTimer = setInterval(async () => {
+    if (!room) return;
+    await reloadPlayers();
+    drawMap();
+  }, 1000);
 }
