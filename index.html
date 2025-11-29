@@ -1,5 +1,8 @@
-<!DOCTYPE html><html lang="zh-HK"><head>
-<meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>迷路城市｜玩家端</title>
 <style>
 body{font-family:sans-serif;padding:16px;margin:0;background:#f5f5f5;}
@@ -14,12 +17,14 @@ button{margin:4px 4px 0 0;padding:6px 14px;font-size:14px;cursor:pointer;}
 .cell{border:1px solid #ddd;border-radius:8px;padding:4px 6px;box-sizing:border-box;background:#fafafa;display:flex;flex-direction:column;justify-content:space-between;}
 .dir-label{font-size:11px;color:#666;}
 .shop{font-size:13px;font-weight:bold;word-break:break-all;}
-.center{background:#e9f4ff;border-color:#8bbcff;display:flex;align-items:center;justify-content:center;}
-.you{font-size:14px;font-weight:bold;}
+.center{background:#e9f4ff;border-color:#8bbcff;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+.you{font-size:14px;font-weight:bold;margin-bottom:2px;}
 .empty{border:none;background:transparent;}
 .ops{display:flex;justify-content:center;gap:8px;margin-top:4px;}
 @media(min-width:768px){.view-grid{max-width:520px;}}
-</style></head><body>
+</style>
+</head>
+<body>
 <h1>迷路城市｜玩家端</h1>
 
 <div class="box">
@@ -67,6 +72,7 @@ button{margin:4px 4px 0 0;padding:6px 14px;font-size:14px;cursor:pointer;}
     <div class="cell empty"></div>
     <div class="cell center">
       <div class="you">你在這裡（面向↑）</div>
+      <div id="hereShop" class="shop"></div>
     </div>
     <div class="cell empty"></div>
   </div>
@@ -85,4 +91,5 @@ button{margin:4px 4px 0 0;padding:6px 14px;font-size:14px;cursor:pointer;}
 <script src="js/supabaseClient.js"></script>
 <script src="js/shopName.js"></script>
 <script src="js/player.js"></script>
-</body></html>
+</body>
+</html>
