@@ -1,11 +1,11 @@
-// js/viewer.js
-// 觀眾端：顯示整張地圖＋牆＋玩家位置與面向＋視野，並顯示遊戲時間與四面 2 格資料
+// viewer.js
+// 觀眾端：顯示整張地圖＋牆＋玩家位置與面向＋視野（前方 3×2），並顯示遊戲時間與四面 2 格資料
 
 let room = null;
 let players = [];
 let pollTimer = null;
 let viewerStartTime = null;
-let mapGrid = null; // mapGrid[y][x] = { type: 'road' | 'wall' }
+let mapGrid = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -54,7 +54,7 @@ async function joinViewer() {
 
   await reloadPlayers();
 
-  s.textContent = `房間 ${room.code}｜地圖 ${size}×${size}`;
+  s.textContent = `房間 ${size}×${size} ｜ 房間代碼 ${room.code}`;
   viewerStartTime = Date.now();
   drawMap();
   updateHud();
@@ -76,7 +76,7 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 繪製地圖：牆 → 格線 → 視野 → 玩家 marker
+// 繪圖：牆 → 格線 → 視野 → 玩家
 function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
@@ -89,7 +89,7 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // 牆（灰色）
+  // 牆
   ctx.fillStyle = "#666";
   for (let y = 0; y < n; y++) {
     const row = mapGrid[y];
@@ -117,38 +117,30 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 玩家視野（半透明色塊）
+  // 視野
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
 
-  // 玩家 marker
+  // 玩家
   players.forEach((p) => {
     drawPlayerMarker(ctx, p, n, cell);
   });
 }
 
 /**
- * 視野 6 格（與 player.js 完全一致）：
- * - 左前 1 格、左前 2 格
- * - 前方 1 格、前方 2 格
- * - 右前 1 格、右前 2 格
- *
- * direction 編碼：
- * 0: 北 (y-1)
- * 1: 東 (x+1)
- * 2: 南 (y+1)
- * 3: 西 (x-1)
+ * 視野 6 格：完全對齊 player.js
+ * 排 1：左前1, 前1, 右前1
+ * 排 2：左前2, 前2, 右前2（= front2 左右各一格）
  */
 function drawPlayerFov(ctx, p, n, cell) {
   if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
 
-  // 和 player.js 一樣的方向向量
   const dirVec = [
-    { dx: 0, dy: -1 }, // 0 北
-    { dx: 1, dy: 0 },  // 1 東
-    { dx: 0, dy: 1 },  // 2 南
-    { dx: -1, dy: 0 }  // 3 西
+    { dx: 0, dy: -1 }, // 北
+    { dx: 1, dy: 0 },  // 東
+    { dx: 0, dy: 1 },  // 南
+    { dx: -1, dy: 0 }  // 西
   ];
 
   const d = p.direction;
@@ -156,36 +148,16 @@ function drawPlayerFov(ctx, p, n, cell) {
   const left = dirVec[(d + 3) % 4] || dirVec[3];
   const right = dirVec[(d + 1) % 4] || dirVec[1];
 
-  const cells = [];
-
-  // 前方 1 / 2 格
   const front1 = { x: p.x + forward.dx, y: p.y + forward.dy };
   const front2 = { x: p.x + 2 * forward.dx, y: p.y + 2 * forward.dy };
-  cells.push(front1, front2);
 
-  // 左前 1 / 2 格
-  const lf1 = {
-    x: p.x + forward.dx + left.dx,
-    y: p.y + forward.dy + left.dy
-  };
-  const lf2 = {
-    x: p.x + 2 * forward.dx + 2 * left.dx,
-    y: p.y + 2 * forward.dy + 2 * left.dy
-  };
-  cells.push(lf1, lf2);
+  const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
+  const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
+  const lf2 = { x: front2.x + left.dx, y: front2.y + left.dy };
+  const rf2 = { x: front2.x + right.dx, y: front2.y + right.dy };
 
-  // 右前 1 / 2 格
-  const rf1 = {
-    x: p.x + forward.dx + right.dx,
-    y: p.y + forward.dy + right.dy
-  };
-  const rf2 = {
-    x: p.x + 2 * forward.dx + 2 * right.dx,
-    y: p.y + 2 * forward.dy + 2 * right.dy
-  };
-  cells.push(rf1, rf2);
+  const cells = [lf2, front2, rf2, lf1, front1, rf1];
 
-  // 顏色：與之前保持一致
   let fillColor = "rgba(200,200,200,0.25)";
   if (p.role === "A") fillColor = "rgba(255,0,0,0.25)";
   else if (p.role === "B") fillColor = "rgba(0,0,255,0.25)";
@@ -238,7 +210,7 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.stroke();
 }
 
-// HUD：時間 + 每玩家「四面 2 格」資料（地圖絕對方向）
+// HUD：時間 + 每玩家「四面 2 格」資料（絕對方向）
 function updateHud() {
   updateGameTime();
   updatePlayerInfo();
@@ -357,7 +329,6 @@ function setupRealtimeViewer() {
     });
 }
 
-// 保險輪詢
 function setupPolling() {
   if (pollTimer) {
     clearInterval(pollTimer);
