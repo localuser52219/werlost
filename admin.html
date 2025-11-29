@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>迷路城市｜房間控制台</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .box { border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
+    label { display: block; margin: 4px 0; }
+    input, select { padding: 4px; }
+    button { margin: 5px 0; padding: 6px 14px; }
+    .links a { display: block; margin: 3px 0; }
+    .small { font-size: 12px; color: #666; }
+  </style>
+</head>
+<body>
+  <h1>迷路城市｜房間控制台</h1>
+
+  <div class="box">
+    <h2>建立 / 重設房間</h2>
+    <label>
+      房間代碼（例如 TEST01）：
+      <input id="roomCode" />
+    </label>
+
+    <label>
+      地圖大小：
+      <select id="mapSize">
+        <option value="10">10 × 10</option>
+        <option value="25" selected>25 × 25</option>
+        <option value="50">50 × 50</option>
+      </select>
+    </label>
+
+    <label>
+      地圖種子 seed（可留空自動生成）：
+      <input id="seedInput" />
+    </label>
+
+    <p class="small">
+      玩家初始座標預設為：<br/>
+      A：左上角附近 (1,1)，朝北<br/>
+      B：右下角附近 (map_size-2, map_size-2)，朝南
+    </p>
+
+    <button id="createResetBtn">建立 / 重設房間</button>
+    <div id="status"></div>
+  </div>
+
+  <div class="box">
+    <h2>快速進入連結</h2>
+    <div id="links" class="links small">
+      尚未建立房間。
+    </div>
+  </div>
+
+  <div class="box small">
+    <p>其他頁面直接網址：</p>
+    <ul>
+      <li>玩家端：<code>/index.html</code></li>
+      <li>觀眾端：<code>/viewer.html</code></li>
+    </ul>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/admin.js"></script>
+</body>
+</html>
