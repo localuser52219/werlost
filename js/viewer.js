@@ -1,9 +1,10 @@
 // viewer.js
-// 觀眾端：顯示整張地圖＋玩家位置＋玩家面向與視野，並即時更新
+// 觀眾端：顯示整張地圖＋玩家位置＋玩家面向與視野，並顯示遊戲時間與四面 2 格資料
 
 let room = null;
 let players = [];
 let pollTimer = null;
+let viewerStartTime = null; // 用於顯示遊戲時間（從 viewer 載入起計）
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -44,7 +45,9 @@ async function joinViewer() {
   await reloadPlayers();
 
   s.textContent = `房間 ${room.code}｜地圖 ${room.map_size}×${room.map_size}`;
+  viewerStartTime = Date.now();
   drawMap();
+  updateHud(); // 時間 + 四面 2 格資料
   setupRealtimeViewer();
   setupPolling();
 }
@@ -102,7 +105,7 @@ function drawMap() {
   });
 }
 
-// 畫玩家視野：左前、右前、左前2、右前2、前、前2
+// 畫玩家視野：左前、右前、左前2、右前2、前、前2（相對玩家面向）
 function drawPlayerFov(ctx, p, n, cell) {
   if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
 
@@ -117,7 +120,6 @@ function drawPlayerFov(ctx, p, n, cell) {
   const left = dirVec[(p.direction + 3) % 4];
   const right = dirVec[(p.direction + 1) % 4];
 
-  // 視野座標
   const cells = [];
 
   // 前 1、前 2
@@ -203,6 +205,89 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.stroke();
 }
 
+// 更新 HUD（時間 + 每個玩家四面 2 格資料）
+function updateHud() {
+  updateGameTime();
+  updatePlayerInfo();
+}
+
+// 遊戲時間（以 viewer 啟動時間為基準）
+function updateGameTime() {
+  if (!viewerStartTime) return;
+  const el = document.getElementById("gameTime");
+  const elapsedMs = Date.now() - viewerStartTime;
+  const totalSec = Math.floor(elapsedMs / 1000);
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+
+  const pad = (n) => (n < 10 ? "0" + n : "" + n);
+  el.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
+}
+
+// 顯示每個玩家周圍「四面 2 格」的店舖資料（相對地圖：北東南西）
+function updatePlayerInfo() {
+  const infoEl = document.getElementById("playerInfo");
+  if (!room || !players.length) {
+    infoEl.innerHTML = "";
+    return;
+  }
+
+  const dirText = ["北", "東", "南", "西"];
+  const n = room.map_size;
+  const seed = room.seed;
+
+  const getNameOrDash = (x, y) => {
+    if (x < 0 || x >= n || y < 0 || y >= n) return "─";
+    return window.getShopName(seed, x, y);
+  };
+
+  // 北東南西方向向量（固定，不依玩家面向）
+  const north = { dx: 0, dy: -1 };
+  const east = { dx: 1, dy: 0 };
+  const south = { dx: 0, dy: 1 };
+  const west = { dx: -1, dy: 0 };
+
+  let html = "";
+
+  // 方便閱讀，按照角色排序（A 在前）
+  const sorted = [...players].sort((a, b) => {
+    if (a.role === b.role) return 0;
+    if (a.role === "A") return -1;
+    if (b.role === "A") return 1;
+    return a.role.localeCompare(b.role);
+  });
+
+  sorted.forEach((p) => {
+    const dirLabel =
+      p.direction >= 0 && p.direction <= 3 ? dirText[p.direction] : "?";
+
+    const n1 = getNameOrDash(p.x + north.dx, p.y + north.dy);
+    const n2 = getNameOrDash(p.x + 2 * north.dx, p.y + 2 * north.dy);
+
+    const e1 = getNameOrDash(p.x + east.dx, p.y + east.dy);
+    const e2 = getNameOrDash(p.x + 2 * east.dx, p.y + 2 * east.dy);
+
+    const s1 = getNameOrDash(p.x + south.dx, p.y + south.dy);
+    const s2 = getNameOrDash(p.x + 2 * south.dx, p.y + 2 * south.dy);
+
+    const w1 = getNameOrDash(p.x + west.dx, p.y + west.dy);
+    const w2 = getNameOrDash(p.x + 2 * west.dx, p.y + 2 * west.dy);
+
+    html += `
+      <div class="player-block">
+        <div><strong>玩家 ${p.role}</strong>｜座標 (${p.x}, ${p.y})｜面向：${dirLabel}</div>
+        <div>北 1：${n1}　｜　北 2：${n2}</div>
+        <div>東 1：${e1}　｜　東 2：${e2}</div>
+        <div>南 1：${s1}　｜　南 2：${s2}</div>
+        <div>西 1：${w1}　｜　西 2：${w2}</div>
+      </div>
+    `;
+  });
+
+  infoEl.innerHTML = html;
+}
+
 // Realtime 監聽 players INSERT / UPDATE / DELETE
 function setupRealtimeViewer() {
   if (!room) return;
@@ -222,6 +307,7 @@ function setupRealtimeViewer() {
           const oldRow = payload.old;
           players = players.filter((p) => p.id !== oldRow.id);
           drawMap();
+          updateHud();
           return;
         }
 
@@ -234,6 +320,7 @@ function setupRealtimeViewer() {
           players.push(row);
         }
         drawMap();
+        updateHud();
       }
     )
     .subscribe((status) => {
@@ -250,5 +337,6 @@ function setupPolling() {
     if (!room) return;
     await reloadPlayers();
     drawMap();
+    updateHud();
   }, 1000);
 }
