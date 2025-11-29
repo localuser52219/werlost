@@ -1,11 +1,10 @@
 // player.js
-// 玩家端：加入房間、顯示 6 格視野、移動（含牆＆邊界限制）、Realtime
+// 玩家端：加入房間、顯示 6 格視野（前方 3×2）、移動（含牆＆邊界限制）、Realtime
 
 let room = null;        // rooms 表的一列
 let selfPlayer = null;  // players 表中自己的那列
 let mapGrid = null;     // MapGrid: mapGrid[y][x] = { type: 'road' | 'wall' }
 
-// 綁定 UI + 處理 URL 參數
 document.addEventListener("DOMContentLoaded", () => {
   const joinBtn = document.getElementById("joinBtn");
   const turnLeftBtn = document.getElementById("turnLeft");
@@ -59,7 +58,6 @@ async function joinRoom() {
   }
 
   room = r;
-  // 用 seed + map_size 生成地圖（含牆）
   mapGrid = window.generateMap(room.seed, room.map_size);
 
   const { data: p, error: playerErr } = await window._supabase
@@ -84,7 +82,9 @@ async function joinRoom() {
   updateViewCells();
 }
 
-// 更新視野：左前、左前 2、前、前 2、右前、右前 2
+// 更新視野：前方 3×2 共 6 格
+// 排 1：左前1, 前1, 右前1
+// 排 2：左前2, 前2, 右前2（= front2 左右各一格）
 function updateViewCells() {
   if (!room || !selfPlayer || !mapGrid) return;
 
@@ -103,25 +103,28 @@ function updateViewCells() {
   const left = dirVec[(d + 3) % 4];
   const right = dirVec[(d + 1) % 4];
 
+  // 前 1 / 2 格
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
+  // 左前 1 = front1 左邊；右前 1 = front1 右邊
   const lf1 = {
-    x: x + forward.dx + left.dx,
-    y: y + forward.dy + left.dy
+    x: front1.x + left.dx,
+    y: front1.y + left.dy
   };
-  const lf2 = {
-    x: x + 2 * forward.dx + 2 * left.dx,
-    y: y + 2 * forward.dy + 2 * left.dy
+  const rf1 = {
+    x: front1.x + right.dx,
+    y: front1.y + right.dy
   };
 
-  const rf1 = {
-    x: x + forward.dx + right.dx,
-    y: y + forward.dy + right.dy
+  // 左前 2 = front2 左邊；右前 2 = front2 右邊
+  const lf2 = {
+    x: front2.x + left.dx,
+    y: front2.y + left.dy
   };
   const rf2 = {
-    x: x + 2 * forward.dx + 2 * right.dx,
-    y: y + 2 * forward.dy + 2 * right.dy
+    x: front2.x + right.dx,
+    y: front2.y + right.dy
   };
 
   const size = room.map_size;
@@ -181,15 +184,11 @@ async function moveForward() {
 
   const size = room.map_size;
 
-  // 邊界檢查
   if (nx < 0 || nx >= size || ny < 0 || ny >= size) {
-    // 出界：不更新
     return;
   }
 
-  // 牆壁檢查
   if (window.isWall(mapGrid, nx, ny)) {
-    // 牆壁：不更新
     return;
   }
 
