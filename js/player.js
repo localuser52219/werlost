@@ -1,5 +1,5 @@
 // player.js
-// 玩家端邏輯：加入房間、顯示三格視野、移動、Realtime
+// 玩家端邏輯：加入房間、顯示 6 格視野、移動、Realtime
 
 let room = null;        // rooms 表的一列
 let selfPlayer = null;  // players 表中自己的那列
@@ -100,7 +100,7 @@ async function joinRoom() {
   updateViewCells();
 }
 
-// 更新視野（左前 / 前方 / 右前）
+// 更新視野：左前、左前 2、前、前 2、右前、右前 2
 function updateViewCells() {
   if (!room || !selfPlayer) return;
 
@@ -120,23 +120,39 @@ function updateViewCells() {
   const left = dirVec[(d + 3) % 4];
   const right = dirVec[(d + 1) % 4];
 
-  const front = { x: x + forward.dx, y: y + forward.dy };
-  const leftFront = {
-    x: front.x + left.dx,
-    y: front.y + left.dy
+  // 前 1、前 2
+  const front1 = { x: x + forward.dx, y: y + forward.dy };
+  const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
+
+  // 左前 1、左前 2
+  const lf1 = {
+    x: x + forward.dx + left.dx,
+    y: y + forward.dy + left.dy
   };
-  const rightFront = {
-    x: front.x + right.dx,
-    y: front.y + right.dy
+  const lf2 = {
+    x: x + 2 * forward.dx + 2 * left.dx,
+    y: y + 2 * forward.dy + 2 * left.dy
   };
 
-  const frontName = window.getShopName(room.seed, front.x, front.y);
-  const leftName = window.getShopName(room.seed, leftFront.x, leftFront.y);
-  const rightName = window.getShopName(room.seed, rightFront.x, rightFront.y);
+  // 右前 1、右前 2
+  const rf1 = {
+    x: x + forward.dx + right.dx,
+    y: y + forward.dy + right.dy
+  };
+  const rf2 = {
+    x: x + 2 * forward.dx + 2 * right.dx,
+    y: y + 2 * forward.dy + 2 * right.dy
+  };
 
-  document.getElementById("frontCell").textContent = frontName;
-  document.getElementById("leftCell").textContent = leftName;
-  document.getElementById("rightCell").textContent = rightName;
+  const getName = (pos) =>
+    window.getShopName(room.seed, pos.x, pos.y);
+
+  document.getElementById("front1").textContent = getName(front1);
+  document.getElementById("front2").textContent = getName(front2);
+  document.getElementById("leftFront1").textContent = getName(lf1);
+  document.getElementById("leftFront2").textContent = getName(lf2);
+  document.getElementById("rightFront1").textContent = getName(rf1);
+  document.getElementById("rightFront2").textContent = getName(rf2);
 }
 
 // 轉向（dir = -1 左轉，+1 右轉）
@@ -203,7 +219,7 @@ function setupRealtime() {
         table: "players",
         filter: `room_id=eq.${room.id}`
       },
-      payload => {
+      (payload) => {
         const row = payload.new;
         if (!selfPlayer) return;
 
@@ -215,7 +231,7 @@ function setupRealtime() {
         }
       }
     )
-    .subscribe(status => {
+    .subscribe((status) => {
       console.log("Realtime status:", status);
     });
 }
