@@ -5,7 +5,7 @@ let room = null;
 let players = [];
 let pollTimer = null;
 let viewerStartTime = null;
-let mapGrid = null; // MapGrid: mapGrid[y][x] = { type: 'road' | 'wall' }
+let mapGrid = null; // mapGrid[y][x] = { type: 'road' | 'wall' }
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -23,6 +23,13 @@ document.addEventListener("DOMContentLoaded", () => {
 async function joinViewer() {
   const code = document.getElementById("roomCode").value.trim();
   const s = document.getElementById("status");
+
+  if (typeof window.generateMap !== "function") {
+    s.textContent = "錯誤：js/shopName.js 未正確載入（generateMap 不存在）";
+    console.error("generateMap is not defined. Check script order.");
+    return;
+  }
+
   if (!code) {
     s.textContent = "請輸入房間代碼";
     return;
@@ -42,12 +49,12 @@ async function joinViewer() {
   }
   room = r;
 
-  // 生成地圖（與玩家端一致）
-  mapGrid = window.generateMap(room.seed, room.map_size);
+  const size = room.map_size || 25;
+  mapGrid = window.generateMap(room.seed, size);
 
   await reloadPlayers();
 
-  s.textContent = `房間 ${room.code}｜地圖 ${room.map_size}×${room.map_size}`;
+  s.textContent = `房間 ${room.code}｜地圖 ${size}×${size}`;
   viewerStartTime = Date.now();
   drawMap();
   updateHud();
@@ -74,7 +81,7 @@ function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
   const ctx = cvs.getContext("2d");
-  const n = room.map_size;
+  const n = room.map_size || mapGrid.length || 25;
   const cell = 20;
 
   cvs.width = n * cell;
@@ -82,11 +89,15 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // 牆：灰色方塊
+  // 牆（灰色）
   ctx.fillStyle = "#666";
   for (let y = 0; y < n; y++) {
+    const row = mapGrid[y];
+    if (!row) continue;
     for (let x = 0; x < n; x++) {
-      if (mapGrid[y][x].type === "wall") {
+      const tile = row[x];
+      if (!tile) continue;
+      if (tile.type === "wall") {
         ctx.fillRect(x * cell, y * cell, cell, cell);
       }
     }
@@ -106,7 +117,7 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 玩家視野（半透明）
+  // 視野
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
@@ -127,9 +138,9 @@ function drawPlayerFov(ctx, p, n, cell) {
     { dx: 0, dy: 1 },  // 南
     { dx: -1, dy: 0 }  // 西
   ];
-  const forward = dirVec[p.direction];
-  const left = dirVec[(p.direction + 3) % 4];
-  const right = dirVec[(p.direction + 1) % 4];
+  const forward = dirVec[p.direction] || dirVec[0];
+  const left = dirVec[(p.direction + 3) % 4] || dirVec[3];
+  const right = dirVec[(p.direction + 1) % 4] || dirVec[1];
 
   const cells = [];
 
@@ -195,7 +206,7 @@ function drawPlayerMarker(ctx, p, n, cell) {
     { dx: 0, dy: 1 },
     { dx: -1, dy: 0 }
   ];
-  const forward = dirVec[p.direction];
+  const forward = dirVec[p.direction] || dirVec[0];
 
   const arrowLen = cell * 0.35;
   const tipX = centerX + forward.dx * arrowLen;
@@ -227,7 +238,6 @@ function updateGameTime() {
   el.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
-// 四面 2 格：遇牆顯示「牆壁」，超界顯示「─」，其餘顯示店名
 function updatePlayerInfo() {
   const infoEl = document.getElementById("playerInfo");
   if (!room || !players.length || !mapGrid) {
@@ -236,12 +246,12 @@ function updatePlayerInfo() {
   }
 
   const dirText = ["北", "東", "南", "西"];
-  const n = room.map_size;
+  const n = room.map_size || mapGrid.length;
   const seed = room.seed;
 
   const getNameOrMark = (x, y) => {
     if (x < 0 || x >= n || y < 0 || y >= n) return "─";
-    if (window.isWall(mapGrid, x, y)) return "牆壁";
+    if (window.isWall && window.isWall(mapGrid, x, y)) return "牆壁";
     return window.getShopName(seed, x, y);
   };
 
@@ -331,4 +341,13 @@ function setupRealtimeViewer() {
 
 // 保險輪詢
 function setupPolling() {
-  if (pollTimer)
+  if (pollTimer) {
+    clearInterval(pollTimer);
+  }
+  pollTimer = setInterval(async () => {
+    if (!room) return;
+    await reloadPlayers();
+    drawMap();
+    updateHud();
+  }, 1000);
+}
