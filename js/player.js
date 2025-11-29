@@ -1,3 +1,4 @@
+// player.js
 // 玩家端邏輯：加入房間、顯示三格視野、移動、Realtime
 
 let room = null;        // rooms 表的一列
@@ -10,14 +11,14 @@ function generateMap(size) {
   for (let y = 0; y < size; y++) {
     const row = [];
     for (let x = 0; x < size; x++) {
-      row.push({ type: 'road' });
+      row.push({ type: "road" });
     }
     map.push(row);
   }
   return map;
 }
 
-// 綁定 UI
+// 綁定 UI + 處理 URL 參數
 document.addEventListener("DOMContentLoaded", () => {
   const joinBtn = document.getElementById("joinBtn");
   const turnLeftBtn = document.getElementById("turnLeft");
@@ -28,6 +29,23 @@ document.addEventListener("DOMContentLoaded", () => {
   turnLeftBtn.addEventListener("click", () => turn(-1));
   turnRightBtn.addEventListener("click", () => turn(1));
   moveForwardBtn.addEventListener("click", () => moveForward());
+
+  // 讀取 URL 參數 ?room=CODE&role=A/B
+  const params = new URLSearchParams(window.location.search);
+  const roomParam = params.get("room");
+  const roleParam = params.get("role");
+
+  if (roomParam) {
+    document.getElementById("roomCode").value = roomParam;
+  }
+  if (roleParam === "A" || roleParam === "B") {
+    document.getElementById("role").value = roleParam;
+  }
+
+  // 若有給 room 參數，自動嘗試加入
+  if (roomParam) {
+    joinRoom();
+  }
 });
 
 // 加入房間：讀取 room + self player
@@ -88,7 +106,7 @@ function updateViewCells() {
 
   const x = selfPlayer.x;
   const y = selfPlayer.y;
-  const d = selfPlayer.direction;  // 0北 1東 2南 3西
+  const d = selfPlayer.direction; // 0北 1東 2南 3西
 
   // 四個方向的單位向量
   const dirVec = [
@@ -136,7 +154,6 @@ async function turn(dir) {
     return;
   }
 
-  // 即時更新本地狀態（Realtime 回來時也會覆蓋）
   selfPlayer.direction = newDir;
   updateViewCells();
 }
@@ -157,7 +174,6 @@ async function moveForward() {
   const nx = selfPlayer.x + f.dx;
   const ny = selfPlayer.y + f.dy;
 
-  // 目前未做邊界/牆檢查，之後可以用 mapGrid 限制
   const { error } = await window._supabase
     .from("players")
     .update({ x: nx, y: ny })
@@ -192,11 +208,9 @@ function setupRealtime() {
         if (!selfPlayer) return;
 
         if (row.id === selfPlayer.id) {
-          // 自己
           selfPlayer = row;
           updateViewCells();
         } else {
-          // 對手（目前只輸出 log，需要可再用）
           console.log("對方位置更新：", row);
         }
       }
