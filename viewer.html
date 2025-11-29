@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>迷路城市｜觀眾端</title>
+  <style>
+    body{font-family:sans-serif;padding:20px}
+    .box{border:1px solid #ccc;padding:10px;margin-top:10px}
+    canvas{border:1px solid #666;max-width:100%;height:auto}
+  </style>
+</head>
+<body>
+  <h1>迷路城市｜觀眾端</h1>
+  <div class="box">
+    <label>房間代碼：
+      <input id="roomCode"/>
+    </label>
+    <button id="joinViewer">載入房間</button>
+    <div id="status"></div>
+  </div>
+  <div class="box">
+    <h2>地圖</h2>
+    <canvas id="mapCanvas"></canvas>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/viewer.js"></script>
+</body>
+</html>
