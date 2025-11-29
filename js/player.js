@@ -1,22 +1,9 @@
 // player.js
-// 玩家端邏輯：加入房間、顯示 6 格視野、移動、Realtime
+// 玩家端：加入房間、顯示 6 格視野、移動（含牆＆邊界限制）、Realtime
 
 let room = null;        // rooms 表的一列
 let selfPlayer = null;  // players 表中自己的那列
-let mapGrid = null;     // 目前只作尺寸參考，可之後加入牆、障礙等
-
-// 生成單純「可走道路」的地圖（之後可改為有牆）
-function generateMap(size) {
-  const map = [];
-  for (let y = 0; y < size; y++) {
-    const row = [];
-    for (let x = 0; x < size; x++) {
-      row.push({ type: "road" });
-    }
-    map.push(row);
-  }
-  return map;
-}
+let mapGrid = null;     // MapGrid: mapGrid[y][x] = { type: 'road' | 'wall' }
 
 // 綁定 UI + 處理 URL 參數
 document.addEventListener("DOMContentLoaded", () => {
@@ -30,7 +17,6 @@ document.addEventListener("DOMContentLoaded", () => {
   turnRightBtn.addEventListener("click", () => turn(1));
   moveForwardBtn.addEventListener("click", () => moveForward());
 
-  // 讀取 URL 參數 ?room=CODE&role=A/B
   const params = new URLSearchParams(window.location.search);
   const roomParam = params.get("room");
   const roleParam = params.get("role");
@@ -42,7 +28,6 @@ document.addEventListener("DOMContentLoaded", () => {
     document.getElementById("role").value = roleParam;
   }
 
-  // 若有給 room 參數，自動嘗試加入
   if (roomParam) {
     joinRoom();
   }
@@ -61,7 +46,6 @@ async function joinRoom() {
 
   statusEl.textContent = "連接房間中…";
 
-  // 1. 查詢 rooms
   const { data: r, error: roomErr } = await window._supabase
     .from("rooms")
     .select("*")
@@ -75,9 +59,9 @@ async function joinRoom() {
   }
 
   room = r;
-  mapGrid = generateMap(room.map_size);
+  // 用 seed + map_size 生成地圖（含牆）
+  mapGrid = window.generateMap(room.seed, room.map_size);
 
-  // 2. 查詢 players 中自己那列
   const { data: p, error: playerErr } = await window._supabase
     .from("players")
     .select("*")
@@ -102,13 +86,12 @@ async function joinRoom() {
 
 // 更新視野：左前、左前 2、前、前 2、右前、右前 2
 function updateViewCells() {
-  if (!room || !selfPlayer) return;
+  if (!room || !selfPlayer || !mapGrid) return;
 
   const x = selfPlayer.x;
   const y = selfPlayer.y;
   const d = selfPlayer.direction; // 0北 1東 2南 3西
 
-  // 四個方向的單位向量
   const dirVec = [
     { dx: 0, dy: -1 }, // 北
     { dx: 1, dy: 0 },  // 東
@@ -120,11 +103,9 @@ function updateViewCells() {
   const left = dirVec[(d + 3) % 4];
   const right = dirVec[(d + 1) % 4];
 
-  // 前 1、前 2
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
-  // 左前 1、左前 2
   const lf1 = {
     x: x + forward.dx + left.dx,
     y: y + forward.dy + left.dy
@@ -134,7 +115,6 @@ function updateViewCells() {
     y: y + 2 * forward.dy + 2 * left.dy
   };
 
-  // 右前 1、右前 2
   const rf1 = {
     x: x + forward.dx + right.dx,
     y: y + forward.dy + right.dy
@@ -144,8 +124,17 @@ function updateViewCells() {
     y: y + 2 * forward.dy + 2 * right.dy
   };
 
-  const getName = (pos) =>
-    window.getShopName(room.seed, pos.x, pos.y);
+  const size = room.map_size;
+
+  const getName = (pos) => {
+    if (pos.x < 0 || pos.x >= size || pos.y < 0 || pos.y >= size) {
+      return "界外";
+    }
+    if (window.isWall(mapGrid, pos.x, pos.y)) {
+      return "牆壁";
+    }
+    return window.getShopName(room.seed, pos.x, pos.y);
+  };
 
   document.getElementById("front1").textContent = getName(front1);
   document.getElementById("front2").textContent = getName(front2);
@@ -174,9 +163,9 @@ async function turn(dir) {
   updateViewCells();
 }
 
-// 前進一格
+// 前進一格（不可出界／不可穿牆）
 async function moveForward() {
-  if (!selfPlayer) return;
+  if (!selfPlayer || !room || !mapGrid) return;
 
   const d = selfPlayer.direction;
   const dirVec = [
@@ -189,6 +178,20 @@ async function moveForward() {
 
   const nx = selfPlayer.x + f.dx;
   const ny = selfPlayer.y + f.dy;
+
+  const size = room.map_size;
+
+  // 邊界檢查
+  if (nx < 0 || nx >= size || ny < 0 || ny >= size) {
+    // 出界：不更新
+    return;
+  }
+
+  // 牆壁檢查
+  if (window.isWall(mapGrid, nx, ny)) {
+    // 牆壁：不更新
+    return;
+  }
 
   const { error } = await window._supabase
     .from("players")
