@@ -8,6 +8,7 @@
     body { font-family: sans-serif; padding: 20px; }
     .box { border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
     button { margin: 5px; padding: 8px 16px; }
+    ul { padding-left: 20px; }
   </style>
 </head>
 <body>
@@ -28,11 +29,14 @@
   </div>
 
   <div class="box">
-    <h2>視野（左前 / 前方 / 右前）</h2>
+    <h2>視野（相對你面向）</h2>
     <ul>
-      <li>左前：<span id="leftCell"></span></li>
-      <li>前方：<span id="frontCell"></span></li>
-      <li>右前：<span id="rightCell"></span></li>
+      <li>左前：<span id="leftFront1"></span></li>
+      <li>左前第 2 格：<span id="leftFront2"></span></li>
+      <li>前方：<span id="front1"></span></li>
+      <li>前方第 2 格：<span id="front2"></span></li>
+      <li>右前：<span id="rightFront1"></span></li>
+      <li>右前第 2 格：<span id="rightFront2"></span></li>
     </ul>
   </div>
 
