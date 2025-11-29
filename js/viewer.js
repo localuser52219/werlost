@@ -1,5 +1,5 @@
 // viewer.js
-// 觀眾端：顯示整張地圖＋牆＋玩家位置與面向＋視野（前方 3×2），並顯示遊戲時間與四面 2 格資料
+// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方 3×2），HUD 顯示以玩家為中心的九格方位資料
 
 let room = null;
 let players = [];
@@ -54,7 +54,7 @@ async function joinViewer() {
 
   await reloadPlayers();
 
-  s.textContent = `房間 ${size}×${size} ｜ 房間代碼 ${room.code}`;
+  s.textContent = `房間 ${room.code}｜地圖 ${size}×${size}`;
   viewerStartTime = Date.now();
   drawMap();
   updateHud();
@@ -76,7 +76,7 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 繪圖：牆 → 格線 → 視野 → 玩家
+// 畫地圖：牆 → 格線 → 視野 → 玩家
 function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
@@ -117,7 +117,7 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 視野
+  // 視野（前方 3×2）
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
@@ -128,11 +128,7 @@ function drawMap() {
   });
 }
 
-/**
- * 視野 6 格：完全對齊 player.js
- * 排 1：左前1, 前1, 右前1
- * 排 2：左前2, 前2, 右前2（= front2 左右各一格）
- */
+// 視野 6 格：與 player.js 對齊
 function drawPlayerFov(ctx, p, n, cell) {
   if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
 
@@ -210,7 +206,7 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.stroke();
 }
 
-// HUD：時間 + 每玩家「四面 2 格」資料（絕對方向）
+// HUD：時間 + 以玩家為中心九宮格方位
 function updateHud() {
   updateGameTime();
   updatePlayerInfo();
@@ -245,11 +241,6 @@ function updatePlayerInfo() {
     return window.getShopName(seed, x, y);
   };
 
-  const north = { dx: 0, dy: -1 };
-  const east = { dx: 1, dy: 0 };
-  const south = { dx: 0, dy: 1 };
-  const west = { dx: -1, dy: 0 };
-
   let html = "";
 
   const sorted = [...players].sort((a, b) => {
@@ -263,25 +254,28 @@ function updatePlayerInfo() {
     const dirLabel =
       p.direction >= 0 && p.direction <= 3 ? dirText[p.direction] : "?";
 
-    const n1 = getNameOrMark(p.x + north.dx, p.y + north.dy);
-    const n2 = getNameOrMark(p.x + 2 * north.dx, p.y + 2 * north.dy);
+    // 以玩家為中心的九宮格：NW, N, NE, W, C, E, SW, S, SE
+    const cx = p.x;
+    const cy = p.y;
 
-    const e1 = getNameOrMark(p.x + east.dx, p.y + east.dy);
-    const e2 = getNameOrMark(p.x + 2 * east.dx, p.y + 2 * east.dy);
+    const nw = getNameOrMark(cx - 1, cy - 1);
+    const nCell = getNameOrMark(cx, cy - 1);
+    const ne = getNameOrMark(cx + 1, cy - 1);
 
-    const s1 = getNameOrMark(p.x + south.dx, p.y + south.dy);
-    const s2 = getNameOrMark(p.x + 2 * south.dx, p.y + 2 * south.dy);
+    const w = getNameOrMark(cx - 1, cy);
+    const c = window.getShopName(seed, cx, cy); // 中心必為玩家所在店舖
+    const e = getNameOrMark(cx + 1, cy);
 
-    const w1 = getNameOrMark(p.x + west.dx, p.y + west.dy);
-    const w2 = getNameOrMark(p.x + 2 * west.dx, p.y + 2 * west.dy);
+    const sw = getNameOrMark(cx - 1, cy + 1);
+    const s = getNameOrMark(cx, cy + 1);
+    const se = getNameOrMark(cx + 1, cy + 1);
 
     html += `
       <div class="player-block">
         <div><strong>玩家 ${p.role}</strong>｜座標 (${p.x}, ${p.y})｜面向：${dirLabel}</div>
-        <div>北 1：${n1}　｜　北 2：${n2}</div>
-        <div>東 1：${e1}　｜　東 2：${e2}</div>
-        <div>南 1：${s1}　｜　南 2：${s2}</div>
-        <div>西 1：${w1}　｜　西 2：${w2}</div>
+        <div>西北：${nw}　｜　北：${nCell}　｜　東北：${ne}</div>
+        <div>西　：${w}　｜　中心：${c}　｜　東　：${e}</div>
+        <div>西南：${sw}　｜　南：${s}　｜　東南：${se}</div>
       </div>
     `;
   });
