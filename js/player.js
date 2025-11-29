@@ -1,9 +1,9 @@
 // player.js
-// 玩家端：加入房間、顯示 6 格視野（前方 3×2）、移動（含牆＆邊界限制）、Realtime
+// 玩家端：加入房間、顯示 6 格視野（前方 3×2）+ 自身店舖名、移動（含牆＆邊界限制）、Realtime
 
-let room = null;        // rooms 表的一列
-let selfPlayer = null;  // players 表中自己的那列
-let mapGrid = null;     // MapGrid: mapGrid[y][x] = { type: 'road' | 'wall' }
+let room = null;
+let selfPlayer = null;
+let mapGrid = null;
 
 document.addEventListener("DOMContentLoaded", () => {
   const joinBtn = document.getElementById("joinBtn");
@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// 加入房間：讀取 room + self player
+// 加入房間
 async function joinRoom() {
   const code = document.getElementById("roomCode").value.trim();
   const role = document.getElementById("role").value;
@@ -82,9 +82,7 @@ async function joinRoom() {
   updateViewCells();
 }
 
-// 更新視野：前方 3×2 共 6 格
-// 排 1：左前1, 前1, 右前1
-// 排 2：左前2, 前2, 右前2（= front2 左右各一格）
+// 更新視野：前方 3×2 六格 + 自身位置名
 function updateViewCells() {
   if (!room || !selfPlayer || !mapGrid) return;
 
@@ -107,25 +105,11 @@ function updateViewCells() {
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
-  // 左前 1 = front1 左邊；右前 1 = front1 右邊
-  const lf1 = {
-    x: front1.x + left.dx,
-    y: front1.y + left.dy
-  };
-  const rf1 = {
-    x: front1.x + right.dx,
-    y: front1.y + right.dy
-  };
-
-  // 左前 2 = front2 左邊；右前 2 = front2 右邊
-  const lf2 = {
-    x: front2.x + left.dx,
-    y: front2.y + left.dy
-  };
-  const rf2 = {
-    x: front2.x + right.dx,
-    y: front2.y + right.dy
-  };
+  // 左前 1 / 2：以 front1 / front2 為基準左右一格
+  const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
+  const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
+  const lf2 = { x: front2.x + left.dx, y: front2.y + left.dy };
+  const rf2 = { x: front2.x + right.dx, y: front2.y + right.dy };
 
   const size = room.map_size;
 
@@ -139,15 +123,21 @@ function updateViewCells() {
     return window.getShopName(room.seed, pos.x, pos.y);
   };
 
+  // 六格視野
   document.getElementById("front1").textContent = getName(front1);
   document.getElementById("front2").textContent = getName(front2);
   document.getElementById("leftFront1").textContent = getName(lf1);
   document.getElementById("leftFront2").textContent = getName(lf2);
   document.getElementById("rightFront1").textContent = getName(rf1);
   document.getElementById("rightFront2").textContent = getName(rf2);
+
+  // 自身所在店舖名
+  const hereName = window.getShopName(room.seed, x, y);
+  const hereEl = document.getElementById("hereShop");
+  if (hereEl) hereEl.textContent = hereName;
 }
 
-// 轉向（dir = -1 左轉，+1 右轉）
+// 轉向
 async function turn(dir) {
   if (!selfPlayer) return;
   const newDir = (selfPlayer.direction + dir + 4) % 4;
@@ -207,7 +197,7 @@ async function moveForward() {
   updateViewCells();
 }
 
-// Realtime 監聽 players 更新
+// Realtime
 function setupRealtime() {
   if (!room) return;
 
