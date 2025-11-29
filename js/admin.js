@@ -1,10 +1,16 @@
 // admin.js
 // 房間控制台：建立 / 重設房間，並產生 Player / Viewer 連結
+// 這版：A / B 起點改為「隨機位置」，且不會重疊
 
 document.addEventListener("DOMContentLoaded", () => {
   const btn = document.getElementById("createResetBtn");
   btn.addEventListener("click", createOrResetRoom);
 });
+
+function randomInt(min, max) {
+  // [min, max] 之間整數
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
 
 async function createOrResetRoom() {
   const codeInput = document.getElementById("roomCode");
@@ -84,12 +90,29 @@ async function createOrResetRoom() {
       room = inserted;
     }
 
-    // 2) 重設玩家 A / B 座標與方向
-    const startAX = 1;
-    const startAY = 1;
-    const startBX = mapSize - 2;
-    const startBY = mapSize - 2;
+    // 2) 隨機產生 A / B 起始位置（在 1..mapSize-2 範圍內，避免貼邊）
+    const minCoord = 1;
+    const maxCoord = mapSize - 2;
 
+    let startAX = randomInt(minCoord, maxCoord);
+    let startAY = randomInt(minCoord, maxCoord);
+
+    let startBX, startBY;
+    // 確保 B 不與 A 重疊，且距離不太近（可自行調整）
+    do {
+      startBX = randomInt(minCoord, maxCoord);
+      startBY = randomInt(minCoord, maxCoord);
+      // manhattan 距離太近就重抽
+    } while (
+      (startBX === startAX && startBY === startAY) ||
+      (Math.abs(startBX - startAX) + Math.abs(startBY - startAY) < Math.floor(mapSize / 3))
+    );
+
+    // 朝向也給隨機（0 北,1 東,2 南,3 西）
+    const dirA = randomInt(0, 3);
+    const dirB = randomInt(0, 3);
+
+    // 3) 重設 / 建立玩家 A / B
     const { error: upErr } = await window._supabase
       .from("players")
       .upsert(
@@ -100,7 +123,7 @@ async function createOrResetRoom() {
             role: "A",
             x: startAX,
             y: startAY,
-            direction: 0 // 北
+            direction: dirA
           },
           {
             room_id: room.id,
@@ -108,7 +131,7 @@ async function createOrResetRoom() {
             role: "B",
             x: startBX,
             y: startBY,
-            direction: 2 // 南
+            direction: dirB
           }
         ],
         { onConflict: "room_id,role" }
@@ -123,11 +146,14 @@ async function createOrResetRoom() {
     statusEl.textContent =
       `房間 ${room.code} 已建立 / 重設完成 ｜ seed = ${room.seed} ｜ map = ${room.map_size}×${room.map_size}`;
 
-    // 3) 產生 Player / Viewer 連結
+    // 4) 產生 Player / Viewer 連結
     const origin = window.location.origin;
-    const playerAUrl = origin + "/index.html?room=" + encodeURIComponent(code) + "&role=A";
-    const playerBUrl = origin + "/index.html?room=" + encodeURIComponent(code) + "&role=B";
-    const viewerUrl = origin + "/viewer.html?room=" + encodeURIComponent(code);
+    const playerAUrl =
+      origin + "/index.html?room=" + encodeURIComponent(code) + "&role=A";
+    const playerBUrl =
+      origin + "/index.html?room=" + encodeURIComponent(code) + "&role=B";
+    const viewerUrl =
+      origin + "/viewer.html?room=" + encodeURIComponent(code);
 
     linksEl.innerHTML = `
       <div>玩家 A：</div>
