@@ -1,58 +1,89 @@
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>迷路城市｜玩家端</title>
-  <style>
-    body { font-family: sans-serif; padding: 20px; }
-    .box { border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
-    button { margin: 5px; padding: 8px 16px; }
-    ul { padding-left: 20px; }
-  </style>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>迷路城市｜玩家端</title>
+<style>
+body{font-family:sans-serif;padding:16px;margin:0;background:#f5f5f5;}
+h1{margin:0 0 10px;font-size:22px;}
+.box{border:1px solid #ccc;background:#fff;padding:10px;margin-top:10px;box-sizing:border-box;}
+label{font-size:14px;margin-right:8px;}
+input,select{padding:4px 6px;font-size:14px;}
+button{margin:4px 4px 0 0;padding:6px 14px;font-size:14px;cursor:pointer;}
+#status{font-size:13px;color:#555;margin-top:4px;}
+.view-title{margin:4px 0 8px;font-size:16px;}
+.view-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:80px;gap:6px;max-width:420px;margin:0 auto;}
+.cell{border:1px solid #ddd;border-radius:8px;padding:4px 6px;box-sizing:border-box;background:#fafafa;display:flex;flex-direction:column;justify-content:space-between;}
+.dir-label{font-size:11px;color:#666;}
+.shop{font-size:13px;font-weight:bold;word-break:break-all;}
+.center{background:#e9f4ff;border-color:#8bbcff;display:flex;align-items:center;justify-content:center;}
+.you{font-size:14px;font-weight:bold;}
+.ops{display:flex;justify-content:center;gap:8px;margin-top:4px;}
+@media (min-width:768px){
+  .view-grid{max-width:520px;}
+  .cell{grid-auto-rows:90px;}
+}
+</style>
 </head>
 <body>
-  <h1>迷路城市｜玩家端</h1>
+<h1>迷路城市｜玩家端</h1>
 
-  <div class="box">
-    <label>房間代碼：
-      <input id="roomCode" />
-    </label>
-    <label>角色：
-      <select id="role">
-        <option value="A">A</option>
-        <option value="B">B</option>
-      </select>
-    </label>
-    <button id="joinBtn">加入房間</button>
-    <div id="status"></div>
+<div class="box">
+  <label>房間代碼：<input id="roomCode"/></label>
+  <label>角色：
+    <select id="role">
+      <option value="A">A</option>
+      <option value="B">B</option>
+    </select>
+  </label>
+  <button id="joinBtn">加入房間</button>
+  <div id="status"></div>
+</div>
+
+<div class="box">
+  <div class="view-title">視野（以你面向為「上方」）</div>
+  <div class="view-grid">
+    <!-- 上排：左前2／前方2／右前2 -->
+    <div class="cell">
+      <div class="dir-label">左前第 2 格</div>
+      <div id="leftFront2" class="shop"></div>
+    </div>
+    <div class="cell">
+      <div class="dir-label">前方第 2 格</div>
+      <div id="front2" class="shop"></div>
+    </div>
+    <div class="cell">
+      <div class="dir-label">右前第 2 格</div>
+      <div id="rightFront2" class="shop"></div>
+    </div>
+    <!-- 下排：左前／自己／右前 -->
+    <div class="cell">
+      <div class="dir-label">左前</div>
+      <div id="leftFront1" class="shop"></div>
+    </div>
+    <div class="cell center">
+      <div class="you">你在這裡（面向↑）</div>
+    </div>
+    <div class="cell">
+      <div class="dir-label">右前</div>
+      <div id="rightFront1" class="shop"></div>
+    </div>
   </div>
+</div>
 
-  <div class="box">
-    <h2>視野（相對你面向）</h2>
-    <ul>
-      <li>左前：<span id="leftFront1"></span></li>
-      <li>左前第 2 格：<span id="leftFront2"></span></li>
-      <li>前方：<span id="front1"></span></li>
-      <li>前方第 2 格：<span id="front2"></span></li>
-      <li>右前：<span id="rightFront1"></span></li>
-      <li>右前第 2 格：<span id="rightFront2"></span></li>
-    </ul>
-  </div>
-
-  <div class="box">
-    <h2>操作</h2>
+<div class="box">
+  <h2 style="margin:0 0 6px;font-size:16px;">操作</h2>
+  <div class="ops">
     <button id="turnLeft">左轉</button>
     <button id="moveForward">向前</button>
     <button id="turnRight">右轉</button>
   </div>
+</div>
 
-  <!-- Supabase SDK -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- 你的 JS 檔案，順序很重要 -->
-  <script src="js/supabaseClient.js"></script>
-  <script src="js/shopName.js"></script>
-  <script src="js/player.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/shopName.js"></script>
+<script src="js/player.js"></script>
 </body>
 </html>
