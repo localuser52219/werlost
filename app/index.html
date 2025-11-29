@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <title>迷路城市 玩家端</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+</head>
+<body>
+  <h1>迷路城市 玩家端</h1>
+
+  <div>
+    <label>房間代碼：
+      <input id="roomCode" />
+    </label>
+    <label>角色：
+      <select id="role">
+        <option value="A">A</option>
+        <option value="B">B</option>
+      </select>
+    </label>
+    <button id="joinBtn">加入房間</button>
+  </div>
+
+  <div id="status"></div>
+
+  <h2>你眼前看見的街景</h2>
+  <ul>
+    <li>左前：<span id="leftCell"></span></li>
+    <li>前方：<span id="frontCell"></span></li>
+    <li>右前：<span id="rightCell"></span></li>
+  </ul>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script>
+    const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
+    const SUPABASE_KEY = 'YOUR-ANON-KEY';
+    const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    const PREFIX = ['亮星','銀樹','紅門','青潮','白羽'];
+    const TYPE = ['咖啡','麵包','藥房','便利','書店'];
+    const SUFFIX = ['舖','店','館','小屋','工房'];
+
+    function hashToInt(str) {
+      let h = 0;
+      for (let i = 0; i < str.length; i++) {
+        h = (h * 31 + str.charCodeAt(i)) >>> 0;
+      }
+      return h;
+    }
+
+    function getShopName(seed, x, y) {
+      const base = hashToInt(seed + ':' + x + ':' + y);
+      const p = base % PREFIX.length;
+      const t = Math.floor(base / 31) % TYPE.length;
+      const s = Math.floor(base / (31 * 31)) % SUFFIX.length;
+      return PREFIX[p] + TYPE[t] + SUFFIX[s];
+    }
+
+    function generateMap(size) {
+      const map = [];
+      for (let y = 0; y < size; y++) {
+        const row = [];
+        for (let x = 0; x < size; x++) row.push({ type: 'road' });
+        map.push(row);
+      }
+      return map;
+    }
+
+    let room = null;
+    let selfPlayer = null;
+    let mapGrid = null;
+
+    async function joinRoom() {
+      const code = document.getElementById('roomCode').value.trim();
+      const role = document.getElementById('role').value;
+      const statusEl = document.getElementById('status');
+      statusEl.textContent = '載入中…';
+
+      const { data: rooms, error: roomErr } = await _supabase
+        .from('rooms')
+        .select('*')
+        .eq('code', code)
+        .maybeSingle();
+
+      if (roomErr || !rooms) {
+        statusEl.textContent = '找不到房間';
+        return;
+      }
+      room = rooms;
+      mapGrid = generateMap(room.map_size);
+
+      const { data: players, error: playerErr } = await _supabase
+        .from('players')
+        .select('*')
+        .eq('room_id', room.id)
+        .eq('role', role)
+        .maybeSingle();
+
+      if (playerErr || !players) {
+        statusEl.textContent = '找不到玩家 ' + role;
+        return;
+      }
+      selfPlayer = players;
+      statusEl.textContent = '已加入房間 ' + room.code + '（地圖 ' + room.map_size + '×' + room.map_size + '）';
+
+      updateViewCells();
+    }
+
+    function updateViewCells() {
+      if (!room || !selfPlayer || !mapGrid) return;
+      const x = selfPlayer.x;
+      const y = selfPlayer.y;
+      const d = selfPlayer.direction; // 0北,1東,2南,3西
+      const dirVec = [
+        { dx: 0, dy: -1 },
+        { dx: 1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: -1, dy: 0 }
+      ];
+      const forward = dirVec[d];
+      const left = dirVec[(d + 3) % 4];
+      const right = dirVec[(d + 1) % 4];
+
+      const frontPos = { x: x + forward.dx, y: y + forward.dy };
+      const leftFrontPos = { x: x + forward.dx + left.dx, y: y + forward.dy + left.dy };
+      const rightFrontPos = { x: x + forward.dx + right.dx, y: y + forward.dy + right.dy };
+
+      const frontName = getShopName(room.seed, frontPos.x, frontPos.y);
+      const leftName = getShopName(room.seed, leftFrontPos.x, leftFrontPos.y);
+      const rightName = getShopName(room.seed, rightFrontPos.x, rightFrontPos.y);
+
+      document.getElementById('frontCell').textContent = frontName;
+      document.getElementById('leftCell').textContent = leftName;
+      document.getElementById('rightCell').textContent = rightName;
+    }
+
+    document.getElementById('joinBtn').addEventListener('click', joinRoom);
+  </script>
+</body>
+</html>
