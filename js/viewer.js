@@ -1,5 +1,5 @@
 // viewer.js
-// 觀眾端：顯示整張地圖＋玩家位置，並即時更新
+// 觀眾端：顯示整張地圖＋玩家位置＋玩家面向與視野，並即時更新
 
 let room = null;
 let players = [];
@@ -64,7 +64,7 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 繪製整張地圖 + 玩家
+// 繪製整張地圖 + 玩家 + 視野
 function drawMap() {
   if (!room) return;
   const cvs = document.getElementById("mapCanvas");
@@ -77,7 +77,7 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // grid
+  // 畫格線
   ctx.strokeStyle = "#ddd";
   for (let i = 0; i <= n; i++) {
     ctx.beginPath();
@@ -91,19 +91,119 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // players
+  // 先畫玩家視野（在玩家底下鋪半透明色塊）
   players.forEach((p) => {
-    if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
-    // A = 紅，B = 藍，其它角色用灰色
-    if (p.role === "A") ctx.fillStyle = "red";
-    else if (p.role === "B") ctx.fillStyle = "blue";
-    else ctx.fillStyle = "gray";
+    drawPlayerFov(ctx, p, n, cell);
+  });
 
-    ctx.fillRect(p.x * cell + 2, p.y * cell + 2, cell - 4, cell - 4);
+  // 再畫玩家本身（方塊 + 面向箭嘴）
+  players.forEach((p) => {
+    drawPlayerMarker(ctx, p, n, cell);
   });
 }
 
-// Realtime 監聽 players INSERT / UPDATE
+// 畫玩家視野：左前、右前、左前2、右前2、前、前2
+function drawPlayerFov(ctx, p, n, cell) {
+  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
+
+  // 方向單位向量
+  const dirVec = [
+    { dx: 0, dy: -1 }, // 北
+    { dx: 1, dy: 0 },  // 東
+    { dx: 0, dy: 1 },  // 南
+    { dx: -1, dy: 0 }  // 西
+  ];
+  const forward = dirVec[p.direction];
+  const left = dirVec[(p.direction + 3) % 4];
+  const right = dirVec[(p.direction + 1) % 4];
+
+  // 視野座標
+  const cells = [];
+
+  // 前 1、前 2
+  const front1 = { x: p.x + forward.dx, y: p.y + forward.dy };
+  const front2 = { x: p.x + 2 * forward.dx, y: p.y + 2 * forward.dy };
+  cells.push(front1, front2);
+
+  // 左前 1、左前 2
+  const lf1 = {
+    x: p.x + forward.dx + left.dx,
+    y: p.y + forward.dy + left.dy
+  };
+  const lf2 = {
+    x: p.x + 2 * forward.dx + 2 * left.dx,
+    y: p.y + 2 * forward.dy + 2 * left.dy
+  };
+  cells.push(lf1, lf2);
+
+  // 右前 1、右前 2
+  const rf1 = {
+    x: p.x + forward.dx + right.dx,
+    y: p.y + forward.dy + right.dy
+  };
+  const rf2 = {
+    x: p.x + 2 * forward.dx + 2 * right.dx,
+    y: p.y + 2 * forward.dy + 2 * right.dy
+  };
+  cells.push(rf1, rf2);
+
+  // 視野顏色：A = 淡紅，B = 淡藍，其它 = 淡灰
+  let fillColor = "rgba(200,200,200,0.25)";
+  if (p.role === "A") fillColor = "rgba(255,0,0,0.25)";
+  else if (p.role === "B") fillColor = "rgba(0,0,255,0.25)";
+
+  ctx.save();
+  ctx.fillStyle = fillColor;
+
+  cells.forEach((c) => {
+    if (c.x < 0 || c.x >= n || c.y < 0 || c.y >= n) return;
+    ctx.fillRect(c.x * cell + 1, c.y * cell + 1, cell - 2, cell - 2);
+  });
+
+  ctx.restore();
+}
+
+// 畫玩家方塊 + 面向箭嘴
+function drawPlayerMarker(ctx, p, n, cell) {
+  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
+
+  // 顏色：A 紅、B 藍、其他灰
+  let color = "gray";
+  if (p.role === "A") color = "red";
+  else if (p.role === "B") color = "blue";
+
+  const xPix = p.x * cell;
+  const yPix = p.y * cell;
+
+  // 玩家方塊
+  ctx.fillStyle = color;
+  ctx.fillRect(xPix + 2, yPix + 2, cell - 4, cell - 4);
+
+  // 面向箭嘴（從中心畫一條線指向前方）
+  const centerX = xPix + cell / 2;
+  const centerY = yPix + cell / 2;
+
+  const dirVec = [
+    { dx: 0, dy: -1 }, // 北
+    { dx: 1, dy: 0 },  // 東
+    { dx: 0, dy: 1 },  // 南
+    { dx: -1, dy: 0 }  // 西
+  ];
+  const forward = dirVec[p.direction];
+
+  const arrowLen = cell * 0.35;
+  const tipX = centerX + forward.dx * arrowLen;
+  const tipY = centerY + forward.dy * arrowLen;
+
+  ctx.strokeStyle = "white";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(centerX, centerY);
+  ctx.lineTo(tipX, tipY);
+  ctx.stroke();
+}
+
+// Realtime 監聽 players INSERT / UPDATE / DELETE
 function setupRealtimeViewer() {
   if (!room) return;
 
@@ -118,11 +218,15 @@ function setupRealtimeViewer() {
         filter: `room_id=eq.${room.id}`
       },
       (payload) => {
-        const row = payload.new;
-        if (!row) {
-          // DELETE 的情況，可視需要再處理
+        if (payload.eventType === "DELETE") {
+          const oldRow = payload.old;
+          players = players.filter((p) => p.id !== oldRow.id);
+          drawMap();
           return;
         }
+
+        const row = payload.new;
+        if (!row) return;
         const idx = players.findIndex((p) => p.id === row.id);
         if (idx >= 0) {
           players[idx] = row;
