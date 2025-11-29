@@ -1,14 +1,19 @@
 <!DOCTYPE html>
 <html lang="zh-HK">
 <head>
-  <meta charset="UTF-8" />
-  <title>迷路城市 玩家端</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>迷路城市｜玩家端</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    .box { border: 1px solid #ccc; padding: 10px; margin-top: 10px; }
+    button { margin: 5px; padding: 10px 20px; }
+  </style>
 </head>
 <body>
-  <h1>迷路城市 玩家端</h1>
+  <h1>迷路城市｜玩家端</h1>
 
-  <div>
+  <div class="box">
     <label>房間代碼：
       <input id="roomCode" />
     </label>
@@ -19,32 +24,46 @@
       </select>
     </label>
     <button id="joinBtn">加入房間</button>
+    <div id="status"></div>
   </div>
 
-  <div id="status"></div>
+  <div class="box">
+    <h2>視野（左前 / 前方 / 右前）</h2>
+    <ul>
+      <li>左前：<span id="leftCell"></span></li>
+      <li>前方：<span id="frontCell"></span></li>
+      <li>右前：<span id="rightCell"></span></li>
+    </ul>
+  </div>
 
-  <h2>你眼前看見的街景</h2>
-  <ul>
-    <li>左前：<span id="leftCell"></span></li>
-    <li>前方：<span id="frontCell"></span></li>
-    <li>右前：<span id="rightCell"></span></li>
-  </ul>
+  <div class="box">
+    <h2>操作</h2>
+    <button id="turnLeft">左轉</button>
+    <button id="moveForward">向前</button>
+    <button id="turnRight">右轉</button>
+  </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script>
-    const SUPABASE_URL = 'https://YOUR-PROJECT.supabase.co';
-    const SUPABASE_KEY = 'YOUR-ANON-KEY';
+    /*--------------------------------------------------
+      你需要修改這兩個值
+      --------------------------------------------------*/
+    const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
+    const SUPABASE_KEY = "請放入你最新 Rotate 後的 anon key";
+
     const _supabase = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    const PREFIX = ['亮星','銀樹','紅門','青潮','白羽'];
-    const TYPE = ['咖啡','麵包','藥房','便利','書店'];
-    const SUFFIX = ['舖','店','館','小屋','工房'];
+    /*--------------------------------------------------
+      店舖名稱詞庫（簡化）
+      --------------------------------------------------*/
+    const PREFIX = ['亮星','銀樹','紅門','青潮','白羽','微光','松竹','石橋','山城','港景'];
+    const TYPE = ['咖啡','麵包','藥房','便利','書店','冰室','花店','服裝','五金','雜貨'];
+    const SUFFIX = ['舖','店','館','小屋','工房','站','街角','樓','屋','社'];
 
     function hashToInt(str) {
       let h = 0;
-      for (let i = 0; i < str.length; i++) {
+      for (let i = 0; i < str.length; i++)
         h = (h * 31 + str.charCodeAt(i)) >>> 0;
-      }
       return h;
     }
 
@@ -52,89 +71,162 @@
       const base = hashToInt(seed + ':' + x + ':' + y);
       const p = base % PREFIX.length;
       const t = Math.floor(base / 31) % TYPE.length;
-      const s = Math.floor(base / (31 * 31)) % SUFFIX.length;
+      const s = Math.floor(base / (31*31)) % SUFFIX.length;
       return PREFIX[p] + TYPE[t] + SUFFIX[s];
     }
 
     function generateMap(size) {
       const map = [];
-      for (let y = 0; y < size; y++) {
-        const row = [];
-        for (let x = 0; x < size; x++) row.push({ type: 'road' });
+      for (let y=0;y<size;y++){
+        const row=[];
+        for (let x=0;x<size;x++) row.push({type:'road'});
         map.push(row);
       }
       return map;
     }
 
+    /*--------------------------------------------------
+      遊戲狀態
+      --------------------------------------------------*/
     let room = null;
     let selfPlayer = null;
     let mapGrid = null;
 
+    /*--------------------------------------------------
+      加入房間
+      --------------------------------------------------*/
+    document.getElementById("joinBtn").addEventListener("click", joinRoom);
+
     async function joinRoom() {
-      const code = document.getElementById('roomCode').value.trim();
-      const role = document.getElementById('role').value;
-      const statusEl = document.getElementById('status');
-      statusEl.textContent = '載入中…';
+      const code = document.getElementById("roomCode").value.trim();
+      const role = document.getElementById("role").value;
+      const statusEl = document.getElementById("status");
 
-      const { data: rooms, error: roomErr } = await _supabase
-        .from('rooms')
-        .select('*')
-        .eq('code', code)
-        .maybeSingle();
+      statusEl.textContent = "連接中…";
 
-      if (roomErr || !rooms) {
-        statusEl.textContent = '找不到房間';
-        return;
-      }
-      room = rooms;
+      const { data: r } = await _supabase
+        .from("rooms").select("*").eq("code", code).maybeSingle();
+
+      if (!r) { statusEl.textContent="房間不存在"; return; }
+
+      room = r;
       mapGrid = generateMap(room.map_size);
 
-      const { data: players, error: playerErr } = await _supabase
-        .from('players')
-        .select('*')
-        .eq('room_id', room.id)
-        .eq('role', role)
+      const { data: p } = await _supabase
+        .from("players").select("*")
+        .eq("room_id", room.id)
+        .eq("role", role)
         .maybeSingle();
 
-      if (playerErr || !players) {
-        statusEl.textContent = '找不到玩家 ' + role;
-        return;
-      }
-      selfPlayer = players;
-      statusEl.textContent = '已加入房間 ' + room.code + '（地圖 ' + room.map_size + '×' + room.map_size + '）';
+      if (!p) { statusEl.textContent="沒有這個角色"; return; }
 
+      selfPlayer = p;
+
+      statusEl.textContent =
+        `已進入房間 ${room.code} ｜ 地圖 ${room.map_size}×${room.map_size}`;
+
+      setupRealtime();
       updateViewCells();
     }
 
+    /*--------------------------------------------------
+      顯示三格（左前、前方、右前）
+      --------------------------------------------------*/
     function updateViewCells() {
-      if (!room || !selfPlayer || !mapGrid) return;
+      if (!room || !selfPlayer) return;
+
       const x = selfPlayer.x;
       const y = selfPlayer.y;
-      const d = selfPlayer.direction; // 0北,1東,2南,3西
+      const d = selfPlayer.direction; // 0北 1東 2南 3西
+
       const dirVec = [
-        { dx: 0, dy: -1 },
-        { dx: 1, dy: 0 },
-        { dx: 0, dy: 1 },
-        { dx: -1, dy: 0 }
+        {dx:0,dy:-1}, {dx:1,dy:0},
+        {dx:0,dy:1},  {dx:-1,dy:0}
       ];
+
       const forward = dirVec[d];
-      const left = dirVec[(d + 3) % 4];
-      const right = dirVec[(d + 1) % 4];
+      const left = dirVec[(d+3)%4];
+      const right = dirVec[(d+1)%4];
 
-      const frontPos = { x: x + forward.dx, y: y + forward.dy };
-      const leftFrontPos = { x: x + forward.dx + left.dx, y: y + forward.dy + left.dy };
-      const rightFrontPos = { x: x + forward.dx + right.dx, y: y + forward.dy + right.dy };
+      const front = {x:x+forward.dx, y:y+forward.dy};
+      const leftFront = {x:front.x+left.dx, y:front.y+left.dy};
+      const rightFront = {x:front.x+right.dx, y:front.y+right.dy};
 
-      const frontName = getShopName(room.seed, frontPos.x, frontPos.y);
-      const leftName = getShopName(room.seed, leftFrontPos.x, leftFrontPos.y);
-      const rightName = getShopName(room.seed, rightFrontPos.x, rightFrontPos.y);
+      document.getElementById("frontCell").textContent =
+        getShopName(room.seed, front.x, front.y);
 
-      document.getElementById('frontCell').textContent = frontName;
-      document.getElementById('leftCell').textContent = leftName;
-      document.getElementById('rightCell').textContent = rightName;
+      document.getElementById("leftCell").textContent =
+        getShopName(room.seed, leftFront.x, leftFront.y);
+
+      document.getElementById("rightCell").textContent =
+        getShopName(room.seed, rightFront.x, rightFront.y);
     }
 
-    document.getElementById('joinBtn').addEventListener('click', joinRoom);
+    /*--------------------------------------------------
+      玩家操作：左轉 / 右轉 / 前進
+      --------------------------------------------------*/
+    document.getElementById("turnLeft").addEventListener("click", () => turn(-1));
+    document.getElementById("turnRight").addEventListener("click", () => turn(1));
+    document.getElementById("moveForward").addEventListener("click", () => moveForward());
+
+    async function turn(dir) {
+      if (!selfPlayer) return;
+      const newDir = (selfPlayer.direction + dir + 4) % 4;
+
+      await _supabase.from("players")
+        .update({ direction: newDir })
+        .eq("id", selfPlayer.id);
+
+      // 即時更新（Realtime 會覆蓋）
+      selfPlayer.direction = newDir;
+      updateViewCells();
+    }
+
+    async function moveForward() {
+      if (!selfPlayer) return;
+      const d = selfPlayer.direction;
+      const dirVec = [
+        {dx:0,dy:-1}, {dx:1,dy:0},
+        {dx:0,dy:1},  {dx:-1,dy:0}
+      ];
+      const f = dirVec[d];
+      const nx = selfPlayer.x + f.dx;
+      const ny = selfPlayer.y + f.dy;
+
+      await _supabase.from("players")
+        .update({ x: nx, y: ny })
+        .eq("id", selfPlayer.id);
+
+      selfPlayer.x = nx;
+      selfPlayer.y = ny;
+      updateViewCells();
+    }
+
+    /*--------------------------------------------------
+      Realtime 監聽玩家更新
+      --------------------------------------------------*/
+    function setupRealtime() {
+      _supabase.channel("room_changes")
+        .on("postgres_changes", {
+          event: "UPDATE",
+          schema: "public",
+          table: "players",
+          filter: `room_id=eq.${room.id}`
+        }, payload => {
+          const row = payload.new;
+
+          if (row.id === selfPlayer.id) {
+            // 自己
+            selfPlayer = row;
+            updateViewCells();
+          } else {
+            // 對方（如需用到可加入）
+            console.log("對方更新位置：", row);
+          }
+        })
+        .subscribe();
+    }
   </script>
+
 </body>
 </html>
