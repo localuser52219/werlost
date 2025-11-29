@@ -8,10 +8,13 @@
     body{font-family:sans-serif;padding:20px}
     .box{border:1px solid #ccc;padding:10px;margin-top:10px}
     canvas{border:1px solid #666;max-width:100%;height:auto}
+    .hud-label{font-weight:bold;margin-right:8px}
+    .player-block{margin-top:8px;padding-top:6px;border-top:1px dashed #ccc;font-size:14px;line-height:1.4}
   </style>
 </head>
 <body>
   <h1>迷路城市｜觀眾端</h1>
+
   <div class="box">
     <label>房間代碼：
       <input id="roomCode"/>
@@ -19,6 +22,13 @@
     <button id="joinViewer">載入房間</button>
     <div id="status"></div>
   </div>
+
+  <div class="box">
+    <h2>遊戲資訊</h2>
+    <div><span class="hud-label">遊戲時間：</span><span id="gameTime">00:00:00</span></div>
+    <div id="playerInfo"></div>
+  </div>
+
   <div class="box">
     <h2>地圖</h2>
     <canvas id="mapCanvas"></canvas>
@@ -26,6 +36,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="js/supabaseClient.js"></script>
+  <script src="js/shopName.js"></script>
   <script src="js/viewer.js"></script>
 </body>
 </html>
