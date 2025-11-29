@@ -1,334 +1,162 @@
-// viewer.js
-// 觀眾端：顯示整張地圖＋牆＋玩家位置與面向＋視野，並顯示遊戲時間與四面 2 格資料
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>迷路城市｜觀眾端</title>
+  <style>
+    body{
+      font-family:sans-serif;
+      padding:20px;
+      box-sizing:border-box;
+      margin:0;
+      background:#f5f5f5;
+    }
+    h1{
+      margin:0 0 10px 0;
+      font-size:24px;
+    }
+    .box{
+      border:1px solid #ccc;
+      background:#fff;
+      padding:10px;
+      margin-top:10px;
+      box-sizing:border-box;
+    }
+    .top-bar{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      flex-wrap:wrap;
+    }
+    .top-bar label{
+      display:flex;
+      align-items:center;
+      gap:4px;
+      font-size:14px;
+    }
+    .top-bar input{
+      padding:4px 6px;
+      font-size:14px;
+    }
+    .top-bar button{
+      padding:6px 12px;
+      font-size:14px;
+      cursor:pointer;
+    }
+    #status{
+      font-size:13px;
+      color:#555;
+      margin-top:6px;
+    }
 
-let room = null;
-let players = [];
-let pollTimer = null;
-let viewerStartTime = null;
-let mapGrid = null; // MapGrid: mapGrid[y][x] = { type: 'road' | 'wall' }
+    /* 主要版面：地圖 + 資訊 兩欄 */
+    .main-layout{
+      display:flex;
+      flex-wrap:nowrap;
+      gap:12px;
+      margin-top:10px;
+    }
+    .panel-map{
+      flex:2 1 0;
+      min-width:0;
+    }
+    .panel-info{
+      flex:1 0 260px;
+      max-width:420px;
+      font-size:13px;
+      line-height:1.4;
+    }
 
-document.addEventListener("DOMContentLoaded", () => {
-  document
-    .getElementById("joinViewer")
-    .addEventListener("click", joinViewer);
+    canvas{
+      border:1px solid #666;
+      max-width:100%;
+      height:auto;
+      background:#fafafa;
+      display:block;
+    }
 
-  const params = new URLSearchParams(window.location.search);
-  const roomParam = params.get("room");
-  if (roomParam) {
-    document.getElementById("roomCode").value = roomParam;
-    joinViewer();
-  }
-});
+    .hud-label{
+      font-weight:bold;
+      margin-right:6px;
+    }
+    #gameTime{
+      font-family:monospace;
+      font-size:16px;
+    }
 
-async function joinViewer() {
-  const code = document.getElementById("roomCode").value.trim();
-  const s = document.getElementById("status");
-  if (!code) {
-    s.textContent = "請輸入房間代碼";
-    return;
-  }
-  s.textContent = "載入中…";
+    .player-block{
+      margin-top:8px;
+      padding-top:6px;
+      border-top:1px dashed #ccc;
+    }
+    .player-block strong{
+      font-size:14px;
+    }
+    .player-line{
+      display:flex;
+      justify-content:space-between;
+      gap:4px;
+      font-family:monospace;
+      white-space:nowrap;
+    }
+    .player-line span{
+      flex:1 1 0;
+    }
 
-  const { data: r, error: er } = await window._supabase
-    .from("rooms")
-    .select("*")
-    .eq("code", code)
-    .maybeSingle();
-
-  if (er || !r) {
-    s.textContent = "房間不存在";
-    console.error(er);
-    return;
-  }
-  room = r;
-
-  // 生成地圖（與玩家端一致）
-  mapGrid = window.generateMap(room.seed, room.map_size);
-
-  await reloadPlayers();
-
-  s.textContent = `房間 ${room.code}｜地圖 ${room.map_size}×${room.map_size}`;
-  viewerStartTime = Date.now();
-  drawMap();
-  updateHud();
-  setupRealtimeViewer();
-  setupPolling();
-}
-
-async function reloadPlayers() {
-  if (!room) return;
-  const { data: ps, error: ep } = await window._supabase
-    .from("players")
-    .select("*")
-    .eq("room_id", room.id);
-
-  if (ep) {
-    console.error("讀取玩家失敗", ep);
-    return;
-  }
-  players = ps || [];
-}
-
-// 繪製地圖：先牆、再格線、再視野、最後玩家 marker
-function drawMap() {
-  if (!room || !mapGrid) return;
-  const cvs = document.getElementById("mapCanvas");
-  const ctx = cvs.getContext("2d");
-  const n = room.map_size;
-  const cell = 20;
-
-  cvs.width = n * cell;
-  cvs.height = n * cell;
-
-  ctx.clearRect(0, 0, cvs.width, cvs.height);
-
-  // 牆：灰色方塊
-  ctx.fillStyle = "#666";
-  for (let y = 0; y < n; y++) {
-    for (let x = 0; x < n; x++) {
-      if (mapGrid[y][x].type === "wall") {
-        ctx.fillRect(x * cell, y * cell, cell, cell);
+    /* 大螢幕優化：文字不要太擠 */
+    @media (min-width:1200px){
+      body{
+        padding:24px 40px;
+      }
+      h1{
+        font-size:28px;
+      }
+      .panel-info{
+        max-width:500px;
       }
     }
-  }
+  </style>
+</head>
+<body>
+  <h1>迷路城市｜觀眾端</h1>
 
-  // 格線
-  ctx.strokeStyle = "#aaa";
-  for (let i = 0; i <= n; i++) {
-    ctx.beginPath();
-    ctx.moveTo(i * cell, 0);
-    ctx.lineTo(i * cell, n * cell);
-    ctx.stroke();
+  <!-- 上方：房間載入欄 -->
+  <div class="box">
+    <div class="top-bar">
+      <label>
+        房間代碼：
+        <input id="roomCode"/>
+      </label>
+      <button id="joinViewer">載入房間</button>
+    </div>
+    <div id="status"></div>
+  </div>
 
-    ctx.beginPath();
-    ctx.moveTo(0, i * cell);
-    ctx.lineTo(n * cell, i * cell);
-    ctx.stroke();
-  }
+  <!-- 下方：左右兩欄 -->
+  <div class="main-layout">
 
-  // 玩家視野（半透明）
-  players.forEach((p) => {
-    drawPlayerFov(ctx, p, n, cell);
-  });
+    <!-- 左：地圖 -->
+    <div class="panel-map box">
+      <h2>地圖</h2>
+      <canvas id="mapCanvas"></canvas>
+    </div>
 
-  // 玩家 marker
-  players.forEach((p) => {
-    drawPlayerMarker(ctx, p, n, cell);
-  });
-}
-
-// 玩家視野：左前、右前、左前2、右前2、前、前2（相對玩家面向）
-function drawPlayerFov(ctx, p, n, cell) {
-  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
-
-  const dirVec = [
-    { dx: 0, dy: -1 }, // 北
-    { dx: 1, dy: 0 },  // 東
-    { dx: 0, dy: 1 },  // 南
-    { dx: -1, dy: 0 }  // 西
-  ];
-  const forward = dirVec[p.direction];
-  const left = dirVec[(p.direction + 3) % 4];
-  const right = dirVec[(p.direction + 1) % 4];
-
-  const cells = [];
-
-  const front1 = { x: p.x + forward.dx, y: p.y + forward.dy };
-  const front2 = { x: p.x + 2 * forward.dx, y: p.y + 2 * forward.dy };
-  cells.push(front1, front2);
-
-  const lf1 = {
-    x: p.x + forward.dx + left.dx,
-    y: p.y + forward.dy + left.dy
-  };
-  const lf2 = {
-    x: p.x + 2 * forward.dx + 2 * left.dx,
-    y: p.y + 2 * forward.dy + 2 * left.dy
-  };
-  cells.push(lf1, lf2);
-
-  const rf1 = {
-    x: p.x + forward.dx + right.dx,
-    y: p.y + forward.dy + right.dy
-  };
-  const rf2 = {
-    x: p.x + 2 * forward.dx + 2 * right.dx,
-    y: p.y + 2 * forward.dy + 2 * right.dy
-  };
-  cells.push(rf1, rf2);
-
-  let fillColor = "rgba(200,200,200,0.25)";
-  if (p.role === "A") fillColor = "rgba(255,0,0,0.25)";
-  else if (p.role === "B") fillColor = "rgba(0,0,255,0.25)";
-
-  ctx.save();
-  ctx.fillStyle = fillColor;
-
-  cells.forEach((c) => {
-    if (c.x < 0 || c.x >= n || c.y < 0 || c.y >= n) return;
-    ctx.fillRect(c.x * cell + 1, c.y * cell + 1, cell - 2, cell - 2);
-  });
-
-  ctx.restore();
-}
-
-// 玩家 marker + 面向箭嘴
-function drawPlayerMarker(ctx, p, n, cell) {
-  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
-
-  let color = "gray";
-  if (p.role === "A") color = "red";
-  else if (p.role === "B") color = "blue";
-
-  const xPix = p.x * cell;
-  const yPix = p.y * cell;
-
-  ctx.fillStyle = color;
-  ctx.fillRect(xPix + 2, yPix + 2, cell - 4, cell - 4);
-
-  const centerX = xPix + cell / 2;
-  const centerY = yPix + cell / 2;
-
-  const dirVec = [
-    { dx: 0, dy: -1 },
-    { dx: 1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: -1, dy: 0 }
-  ];
-  const forward = dirVec[p.direction];
-
-  const arrowLen = cell * 0.35;
-  const tipX = centerX + forward.dx * arrowLen;
-  const tipY = centerY + forward.dy * arrowLen;
-
-  ctx.strokeStyle = "white";
-  ctx.lineWidth = 2;
-  ctx.beginPath();
-  ctx.moveTo(centerX, centerY);
-  ctx.lineTo(tipX, tipY);
-  ctx.stroke();
-}
-
-// HUD：時間 + 每玩家「四面 2 格」資料
-function updateHud() {
-  updateGameTime();
-  updatePlayerInfo();
-}
-
-function updateGameTime() {
-  if (!viewerStartTime) return;
-  const el = document.getElementById("gameTime");
-  const elapsedMs = Date.now() - viewerStartTime;
-  const totalSec = Math.floor(elapsedMs / 1000);
-  const h = Math.floor(totalSec / 3600);
-  const m = Math.floor((totalSec % 3600) / 60);
-  const s = totalSec % 60;
-  const pad = (n) => (n < 10 ? "0" + n : "" + n);
-  el.textContent = `${pad(h)}:${pad(m)}:${pad(s)}`;
-}
-
-// 四面 2 格：遇牆顯示「牆壁」，超界顯示「─」，其餘顯示店名
-function updatePlayerInfo() {
-  const infoEl = document.getElementById("playerInfo");
-  if (!room || !players.length || !mapGrid) {
-    infoEl.innerHTML = "";
-    return;
-  }
-
-  const dirText = ["北", "東", "南", "西"];
-  const n = room.map_size;
-  const seed = room.seed;
-
-  const getNameOrMark = (x, y) => {
-    if (x < 0 || x >= n || y < 0 || y >= n) return "─";
-    if (window.isWall(mapGrid, x, y)) return "牆壁";
-    return window.getShopName(seed, x, y);
-  };
-
-  const north = { dx: 0, dy: -1 };
-  const east = { dx: 1, dy: 0 };
-  const south = { dx: 0, dy: 1 };
-  const west = { dx: -1, dy: 0 };
-
-  let html = "";
-
-  const sorted = [...players].sort((a, b) => {
-    if (a.role === b.role) return 0;
-    if (a.role === "A") return -1;
-    if (b.role === "A") return 1;
-    return a.role.localeCompare(b.role);
-  });
-
-  sorted.forEach((p) => {
-    const dirLabel =
-      p.direction >= 0 && p.direction <= 3 ? dirText[p.direction] : "?";
-
-    const n1 = getNameOrMark(p.x + north.dx, p.y + north.dy);
-    const n2 = getNameOrMark(p.x + 2 * north.dx, p.y + 2 * north.dy);
-
-    const e1 = getNameOrMark(p.x + east.dx, p.y + east.dy);
-    const e2 = getNameOrMark(p.x + 2 * east.dx, p.y + 2 * east.dy);
-
-    const s1 = getNameOrMark(p.x + south.dx, p.y + south.dy);
-    const s2 = getNameOrMark(p.x + 2 * south.dx, p.y + 2 * south.dy);
-
-    const w1 = getNameOrMark(p.x + west.dx, p.y + west.dy);
-    const w2 = getNameOrMark(p.x + 2 * west.dx, p.y + 2 * west.dy);
-
-    html += `
-      <div class="player-block">
-        <div><strong>玩家 ${p.role}</strong>｜座標 (${p.x}, ${p.y})｜面向：${dirLabel}</div>
-        <div>北 1：${n1}　｜　北 2：${n2}</div>
-        <div>東 1：${e1}　｜　東 2：${e2}</div>
-        <div>南 1：${s1}　｜　南 2：${s2}</div>
-        <div>西 1：${w1}　｜　西 2：${w2}</div>
+    <!-- 右：遊戲資訊 -->
+    <div class="panel-info box">
+      <h2>遊戲資訊</h2>
+      <div>
+        <span class="hud-label">遊戲時間：</span>
+        <span id="gameTime">00:00:00</span>
       </div>
-    `;
-  });
+      <div id="playerInfo"></div>
+    </div>
 
-  infoEl.innerHTML = html;
-}
+  </div>
 
-// Realtime
-function setupRealtimeViewer() {
-  if (!room) return;
-
-  window._supabase
-    .channel("viewer_" + room.id)
-    .on(
-      "postgres_changes",
-      {
-        event: "*",
-        schema: "public",
-        table: "players",
-        filter: `room_id=eq.${room.id}`
-      },
-      (payload) => {
-        if (payload.eventType === "DELETE") {
-          const oldRow = payload.old;
-          players = players.filter((p) => p.id !== oldRow.id);
-          drawMap();
-          updateHud();
-          return;
-        }
-
-        const row = payload.new;
-        if (!row) return;
-        const idx = players.findIndex((p) => p.id === row.id);
-        if (idx >= 0) {
-          players[idx] = row;
-        } else {
-          players.push(row);
-        }
-        drawMap();
-        updateHud();
-      }
-    )
-    .subscribe((status) => {
-      console.log("Viewer Realtime status:", status);
-    });
-}
-
-// 保險輪詢
-function setupPolling() {
-  if (pollTimer)
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/shopName.js"></script>
+  <script src="js/viewer.js"></script>
+</body>
+</html>
