@@ -169,42 +169,48 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.restore();
 }
 
-// 玩家 marker + 面向箭嘴
+// 玩家 marker + 面向箭嘴：以「格線交叉點」為中心
 function drawPlayerMarker(ctx, p, n, cell) {
-  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
+  // 仍然用整數座標 (x,y) 代表一個路口節點
+  if (p.x < 0 || p.x > n || p.y < 0 || p.y > n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  const xPix = p.x * cell;
-  const yPix = p.y * cell;
+  // 交叉點座標：在格線交叉點，而不是方格中心
+  const nodeX = p.x * cell;
+  const nodeY = p.y * cell;
 
+  const radius = cell * 0.3;
+
+  // 畫圓形路口標記
   ctx.fillStyle = color;
-  ctx.fillRect(xPix + 2, yPix + 2, cell - 4, cell - 4);
+  ctx.beginPath();
+  ctx.arc(nodeX, nodeY, radius, 0, Math.PI * 2);
+  ctx.fill();
 
-  const centerX = xPix + cell / 2;
-  const centerY = yPix + cell / 2;
-
+  // 箭嘴：由路口往面向方向伸出
   const dirVec = [
-    { dx: 0, dy: -1 },
-    { dx: 1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: -1, dy: 0 }
+    { dx: 0, dy: -1 }, // 0 北
+    { dx: 1, dy: 0 },  // 1 東
+    { dx: 0, dy: 1 },  // 2 南
+    { dx: -1, dy: 0 }  // 3 西
   ];
   const forward = dirVec[p.direction] || dirVec[0];
 
-  const arrowLen = cell * 0.35;
-  const tipX = centerX + forward.dx * arrowLen;
-  const tipY = centerY + forward.dy * arrowLen;
+  const arrowLen = cell * 0.5;
+  const tipX = nodeX + forward.dx * arrowLen;
+  const tipY = nodeY + forward.dy * arrowLen;
 
   ctx.strokeStyle = "white";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(centerX, centerY);
+  ctx.moveTo(nodeX, nodeY);
   ctx.lineTo(tipX, tipY);
   ctx.stroke();
 }
+
 
 // HUD：時間 + 以玩家為中心九宮格方位
 function updateHud() {
