@@ -1,6 +1,5 @@
 // js/viewer.js
-// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方 3×2），HUD 顯示以玩家為中心九宮格
-// 第 2 步：玩家位置以 ix/iy 為主，並在畫面上顯示為「格線交叉點」
+// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方左右 2×2），HUD 顯示以玩家為中心九宮格
 
 let room = null;
 let players = [];
@@ -21,7 +20,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// 工具：從 player 取得位置（ix/iy 為主）
+// 位置：以 ix/iy 為主
 function getPlayerPos(p) {
   const px = (p.ix !== null && p.ix !== undefined) ? p.ix : p.x;
   const py = (p.iy !== null && p.iy !== undefined) ? p.iy : p.y;
@@ -97,7 +96,7 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // 牆（仍以 cell 顯示）
+  // 牆（cell-based）
   ctx.fillStyle = "#666";
   for (let y = 0; y < n; y++) {
     const row = mapGrid[y];
@@ -125,7 +124,7 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 視野（前方 3×2）
+  // 視野（前方左右 2×2）
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
@@ -136,7 +135,7 @@ function drawMap() {
   });
 }
 
-// 視野 6 格：與 player.js 對齊
+// 視野：只畫四格（左前近／遠，右前近／遠）
 function drawPlayerFov(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const x0 = pos.x;
@@ -159,12 +158,24 @@ function drawPlayerFov(ctx, p, n, cell) {
   const front1 = { x: x0 + forward.dx, y: y0 + forward.dy };
   const front2 = { x: x0 + 2 * forward.dx, y: y0 + 2 * forward.dy };
 
-  const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
-  const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
-  const lf2 = { x: front2.x + left.dx, y: front2.y + left.dy };
-  const rf2 = { x: front2.x + right.dx, y: front2.y + right.dy };
+  const leftNear = {
+    x: front1.x + left.dx,
+    y: front1.y + left.dy
+  };
+  const rightNear = {
+    x: front1.x + right.dx,
+    y: front1.y + right.dy
+  };
+  const leftFar = {
+    x: front2.x + left.dx,
+    y: front2.y + left.dy
+  };
+  const rightFar = {
+    x: front2.x + right.dx,
+    y: front2.y + right.dy
+  };
 
-  const cells = [lf2, front2, rf2, lf1, front1, rf1];
+  const cells = [leftNear, rightNear, leftFar, rightFar];
 
   let fillColor = "rgba(200,200,200,0.25)";
   if (p.role === "A") fillColor = "rgba(255,0,0,0.25)";
@@ -187,31 +198,26 @@ function drawPlayerMarker(ctx, p, n, cell) {
   const px = pos.x;
   const py = pos.y;
 
-  // 交叉點座標允許在 0..n 範圍內；目前 ix/iy 是 0..n-1
   if (px < 0 || px > n || py < 0 || py > n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  // 交叉點：在格線交叉點，而不是方格中心
   const nodeX = px * cell;
   const nodeY = py * cell;
-
   const radius = cell * 0.3;
 
-  // 畫圓形路口標記
   ctx.fillStyle = color;
   ctx.beginPath();
   ctx.arc(nodeX, nodeY, radius, 0, Math.PI * 2);
   ctx.fill();
 
-  // 箭嘴：由路口往面向方向伸出
   const dirVec = [
-    { dx: 0, dy: -1 }, // 北
-    { dx: 1, dy: 0 },  // 東
-    { dx: 0, dy: 1 },  // 南
-    { dx: -1, dy: 0 }  // 西
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }
   ];
   const forward = dirVec[p.direction] || dirVec[0];
 
