@@ -1,5 +1,6 @@
 // js/admin.js
 // 控制台：建立 / 重設房間 + 清除全部資料
+// 第 1 步：players 位置同時寫 x,y 以及 ix,iy（暫時當作格子中心）
 
 document.addEventListener("DOMContentLoaded", () => {
   const createBtn = document.getElementById("createResetBtn");
@@ -244,7 +245,7 @@ async function createOrResetRoom() {
       room = inserted;
     }
 
-    // players upsert
+    // players upsert：位置同時寫 x,y 以及 ix,iy
     const dirA = randomInt(0, 3);
     const dirB = randomInt(0, 3);
 
@@ -258,6 +259,8 @@ async function createOrResetRoom() {
             role: "A",
             x: startAX,
             y: startAY,
+            ix: startAX,
+            iy: startAY,
             direction: dirA
           },
           {
@@ -266,6 +269,8 @@ async function createOrResetRoom() {
             role: "B",
             x: startBX,
             y: startBY,
+            ix: startBX,
+            iy: startBY,
             direction: dirB
           }
         ],
