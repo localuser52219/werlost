@@ -1,5 +1,6 @@
-// viewer.js
-// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方 3×2），HUD 顯示以玩家為中心的九格方位資料
+// js/viewer.js
+// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方 3×2），HUD 顯示以玩家為中心九宮格
+// 第 1 步：位置以 ix/iy 為主，fallback x/y
 
 let room = null;
 let players = [];
@@ -19,6 +20,13 @@ document.addEventListener("DOMContentLoaded", () => {
     joinViewer();
   }
 });
+
+// 工具：從 player 取得位置（ix/iy 為主）
+function getPlayerPos(p) {
+  const px = (p.ix !== null && p.ix !== undefined) ? p.ix : p.x;
+  const py = (p.iy !== null && p.iy !== undefined) ? p.iy : p.y;
+  return { x: px, y: py };
+}
 
 async function joinViewer() {
   const code = document.getElementById("roomCode").value.trim();
@@ -117,7 +125,7 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 視野（前方 3×2）
+  // 視野
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
@@ -130,7 +138,11 @@ function drawMap() {
 
 // 視野 6 格：與 player.js 對齊
 function drawPlayerFov(ctx, p, n, cell) {
-  if (p.x < 0 || p.x >= n || p.y < 0 || p.y >= n) return;
+  const pos = getPlayerPos(p);
+  const x0 = pos.x;
+  const y0 = pos.y;
+
+  if (x0 < 0 || x0 >= n || y0 < 0 || y0 >= n) return;
 
   const dirVec = [
     { dx: 0, dy: -1 }, // 北
@@ -144,8 +156,8 @@ function drawPlayerFov(ctx, p, n, cell) {
   const left = dirVec[(d + 3) % 4] || dirVec[3];
   const right = dirVec[(d + 1) % 4] || dirVec[1];
 
-  const front1 = { x: p.x + forward.dx, y: p.y + forward.dy };
-  const front2 = { x: p.x + 2 * forward.dx, y: p.y + 2 * forward.dy };
+  const front1 = { x: x0 + forward.dx, y: y0 + forward.dy };
+  const front2 = { x: x0 + 2 * forward.dx, y: y0 + 2 * forward.dy };
 
   const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
   const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
@@ -169,48 +181,46 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.restore();
 }
 
-// 玩家 marker + 面向箭嘴：以「格線交叉點」為中心
+// 玩家 marker + 面向箭嘴（目前仍畫在格子中心；真正交叉點版留給第 2 步）
 function drawPlayerMarker(ctx, p, n, cell) {
-  // 仍然用整數座標 (x,y) 代表一個路口節點
-  if (p.x < 0 || p.x > n || p.y < 0 || p.y > n) return;
+  const pos = getPlayerPos(p);
+  const px = pos.x;
+  const py = pos.y;
+
+  if (px < 0 || px >= n || py < 0 || py >= n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  // 交叉點座標：在格線交叉點，而不是方格中心
-  const nodeX = p.x * cell;
-  const nodeY = p.y * cell;
+  const xPix = px * cell;
+  const yPix = py * cell;
 
-  const radius = cell * 0.3;
-
-  // 畫圓形路口標記
   ctx.fillStyle = color;
-  ctx.beginPath();
-  ctx.arc(nodeX, nodeY, radius, 0, Math.PI * 2);
-  ctx.fill();
+  ctx.fillRect(xPix + 2, yPix + 2, cell - 4, cell - 4);
 
-  // 箭嘴：由路口往面向方向伸出
+  const centerX = xPix + cell / 2;
+  const centerY = yPix + cell / 2;
+
   const dirVec = [
-    { dx: 0, dy: -1 }, // 0 北
-    { dx: 1, dy: 0 },  // 1 東
-    { dx: 0, dy: 1 },  // 2 南
-    { dx: -1, dy: 0 }  // 3 西
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }
   ];
   const forward = dirVec[p.direction] || dirVec[0];
 
-  const arrowLen = cell * 0.5;
-  const tipX = nodeX + forward.dx * arrowLen;
-  const tipY = nodeY + forward.dy * arrowLen;
+  const arrowLen = cell * 0.35;
+  const tipX = centerX + forward.dx * arrowLen;
+  const tipY = centerY + forward.dy * arrowLen;
 
   ctx.strokeStyle = "white";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(nodeX, nodeY);
+  ctx.moveTo(centerX, centerY);
   ctx.lineTo(tipX, tipY);
   ctx.stroke();
 }
-
 
 // HUD：時間 + 以玩家為中心九宮格方位
 function updateHud() {
@@ -257,19 +267,19 @@ function updatePlayerInfo() {
   });
 
   sorted.forEach((p) => {
+    const pos = getPlayerPos(p);
+    const cx = pos.x;
+    const cy = pos.y;
+
     const dirLabel =
       p.direction >= 0 && p.direction <= 3 ? dirText[p.direction] : "?";
-
-    // 以玩家為中心的九宮格：NW, N, NE, W, C, E, SW, S, SE
-    const cx = p.x;
-    const cy = p.y;
 
     const nw = getNameOrMark(cx - 1, cy - 1);
     const nCell = getNameOrMark(cx, cy - 1);
     const ne = getNameOrMark(cx + 1, cy - 1);
 
     const w = getNameOrMark(cx - 1, cy);
-    const c = window.getShopName(seed, cx, cy); // 中心必為玩家所在店舖
+    const c = window.getShopName(seed, cx, cy);
     const e = getNameOrMark(cx + 1, cy);
 
     const sw = getNameOrMark(cx - 1, cy + 1);
@@ -278,7 +288,7 @@ function updatePlayerInfo() {
 
     html += `
       <div class="player-block">
-        <div><strong>玩家 ${p.role}</strong>｜座標 (${p.x}, ${p.y})｜面向：${dirLabel}</div>
+        <div><strong>玩家 ${p.role}</strong>｜座標 (${cx}, ${cy})｜面向：${dirLabel}</div>
         <div>西北：${nw}　｜　北：${nCell}　｜　東北：${ne}</div>
         <div>西　：${w}　｜　中心：${c}　｜　東　：${e}</div>
         <div>西南：${sw}　｜　南：${s}　｜　東南：${se}</div>
