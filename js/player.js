@@ -1,5 +1,5 @@
-// player.js
-// 玩家端：加入房間、顯示 6 格視野（前方 3×2）+ 自身店舖名、移動（含牆＆邊界限制）、Realtime
+// js/player.js
+// 玩家端：加入房間、顯示 6 格視野 + 自身店舖名、移動（用 ix/iy）
 
 let room = null;
 let selfPlayer = null;
@@ -31,6 +31,13 @@ document.addEventListener("DOMContentLoaded", () => {
     joinRoom();
   }
 });
+
+// 小工具：安全取得玩家位置（ix/iy 為主，fallback x,y）
+function getPlayerPos(p) {
+  const px = (p.ix !== null && p.ix !== undefined) ? p.ix : p.x;
+  const py = (p.iy !== null && p.iy !== undefined) ? p.iy : p.y;
+  return { x: px, y: py };
+}
 
 // 加入房間
 async function joinRoom() {
@@ -86,8 +93,9 @@ async function joinRoom() {
 function updateViewCells() {
   if (!room || !selfPlayer || !mapGrid) return;
 
-  const x = selfPlayer.x;
-  const y = selfPlayer.y;
+  const pos = getPlayerPos(selfPlayer);
+  const x = pos.x;
+  const y = pos.y;
   const d = selfPlayer.direction; // 0北 1東 2南 3西
 
   const dirVec = [
@@ -101,11 +109,9 @@ function updateViewCells() {
   const left = dirVec[(d + 3) % 4];
   const right = dirVec[(d + 1) % 4];
 
-  // 前 1 / 2 格
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
-  // 左前 1 / 2：以 front1 / front2 為基準左右一格
   const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
   const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
   const lf2 = { x: front2.x + left.dx, y: front2.y + left.dy };
@@ -123,7 +129,6 @@ function updateViewCells() {
     return window.getShopName(room.seed, pos.x, pos.y);
   };
 
-  // 六格視野
   document.getElementById("front1").textContent = getName(front1);
   document.getElementById("front2").textContent = getName(front2);
   document.getElementById("leftFront1").textContent = getName(lf1);
@@ -131,7 +136,6 @@ function updateViewCells() {
   document.getElementById("rightFront1").textContent = getName(rf1);
   document.getElementById("rightFront2").textContent = getName(rf2);
 
-  // 自身所在店舖名
   const hereName = window.getShopName(room.seed, x, y);
   const hereEl = document.getElementById("hereShop");
   if (hereEl) hereEl.textContent = hereName;
@@ -156,7 +160,7 @@ async function turn(dir) {
   updateViewCells();
 }
 
-// 前進一格（不可出界／不可穿牆）
+// 前進一格（仍用 cell-based；第 2 步再改 edge-based）
 async function moveForward() {
   if (!selfPlayer || !room || !mapGrid) return;
 
@@ -169,8 +173,12 @@ async function moveForward() {
   ];
   const f = dirVec[d];
 
-  const nx = selfPlayer.x + f.dx;
-  const ny = selfPlayer.y + f.dy;
+  const pos = getPlayerPos(selfPlayer);
+  const x = pos.x;
+  const y = pos.y;
+
+  const nx = x + f.dx;
+  const ny = y + f.dy;
 
   const size = room.map_size;
 
@@ -184,7 +192,12 @@ async function moveForward() {
 
   const { error } = await window._supabase
     .from("players")
-    .update({ x: nx, y: ny })
+    .update({
+      x: nx,
+      y: ny,
+      ix: nx,
+      iy: ny
+    })
     .eq("id", selfPlayer.id);
 
   if (error) {
@@ -194,6 +207,9 @@ async function moveForward() {
 
   selfPlayer.x = nx;
   selfPlayer.y = ny;
+  selfPlayer.ix = nx;
+  selfPlayer.iy = ny;
+
   updateViewCells();
 }
 
