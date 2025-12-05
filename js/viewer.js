@@ -1,6 +1,6 @@
 // js/viewer.js
 // 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方 3×2），HUD 顯示以玩家為中心九宮格
-// 第 1 步：位置以 ix/iy 為主，fallback x/y
+// 第 2 步：玩家位置以 ix/iy 為主，並在畫面上顯示為「格線交叉點」
 
 let room = null;
 let players = [];
@@ -97,7 +97,7 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // 牆
+  // 牆（仍以 cell 顯示）
   ctx.fillStyle = "#666";
   for (let y = 0; y < n; y++) {
     const row = mapGrid[y];
@@ -125,12 +125,12 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 視野
+  // 視野（前方 3×2）
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
 
-  // 玩家
+  // 玩家（交叉點）
   players.forEach((p) => {
     drawPlayerMarker(ctx, p, n, cell);
   });
@@ -181,43 +181,48 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.restore();
 }
 
-// 玩家 marker + 面向箭嘴（目前仍畫在格子中心；真正交叉點版留給第 2 步）
+// 玩家 marker + 面向箭嘴：以「格線交叉點」為中心
 function drawPlayerMarker(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const px = pos.x;
   const py = pos.y;
 
-  if (px < 0 || px >= n || py < 0 || py >= n) return;
+  // 交叉點座標允許在 0..n 範圍內；目前 ix/iy 是 0..n-1
+  if (px < 0 || px > n || py < 0 || py > n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  const xPix = px * cell;
-  const yPix = py * cell;
+  // 交叉點：在格線交叉點，而不是方格中心
+  const nodeX = px * cell;
+  const nodeY = py * cell;
 
+  const radius = cell * 0.3;
+
+  // 畫圓形路口標記
   ctx.fillStyle = color;
-  ctx.fillRect(xPix + 2, yPix + 2, cell - 4, cell - 4);
+  ctx.beginPath();
+  ctx.arc(nodeX, nodeY, radius, 0, Math.PI * 2);
+  ctx.fill();
 
-  const centerX = xPix + cell / 2;
-  const centerY = yPix + cell / 2;
-
+  // 箭嘴：由路口往面向方向伸出
   const dirVec = [
-    { dx: 0, dy: -1 },
-    { dx: 1, dy: 0 },
-    { dx: 0, dy: 1 },
-    { dx: -1, dy: 0 }
+    { dx: 0, dy: -1 }, // 北
+    { dx: 1, dy: 0 },  // 東
+    { dx: 0, dy: 1 },  // 南
+    { dx: -1, dy: 0 }  // 西
   ];
   const forward = dirVec[p.direction] || dirVec[0];
 
-  const arrowLen = cell * 0.35;
-  const tipX = centerX + forward.dx * arrowLen;
-  const tipY = centerY + forward.dy * arrowLen;
+  const arrowLen = cell * 0.5;
+  const tipX = nodeX + forward.dx * arrowLen;
+  const tipY = nodeY + forward.dy * arrowLen;
 
   ctx.strokeStyle = "white";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(centerX, centerY);
+  ctx.moveTo(nodeX, nodeY);
   ctx.lineTo(tipX, tipY);
   ctx.stroke();
 }
