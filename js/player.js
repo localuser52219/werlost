@@ -1,5 +1,5 @@
 // js/player.js
-// 玩家端：加入房間、顯示 6 格視野 + 自身店舖名、移動（用 ix/iy）
+// 玩家端：加入房間、顯示前方左右 2×2 視野 + 自身店舖名、移動（用 ix/iy）
 
 let room = null;
 let selfPlayer = null;
@@ -32,7 +32,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 });
 
-// 小工具：安全取得玩家位置（ix/iy 為主，fallback x,y）
+// 位置：以 ix/iy 為主，fallback x/y
 function getPlayerPos(p) {
   const px = (p.ix !== null && p.ix !== undefined) ? p.ix : p.x;
   const py = (p.iy !== null && p.iy !== undefined) ? p.iy : p.y;
@@ -89,7 +89,7 @@ async function joinRoom() {
   updateViewCells();
 }
 
-// 更新視野：前方 3×2 六格 + 自身位置名
+// 更新視野：前方左右 2×2 四格 + 自身位置名
 function updateViewCells() {
   if (!room || !selfPlayer || !mapGrid) return;
 
@@ -109,13 +109,27 @@ function updateViewCells() {
   const left = dirVec[(d + 3) % 4];
   const right = dirVec[(d + 1) % 4];
 
+  // 以玩家為基準計算前方 intersection，再掛到 cell 上：
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
-  const lf1 = { x: front1.x + left.dx, y: front1.y + left.dy };
-  const rf1 = { x: front1.x + right.dx, y: front1.y + right.dy };
-  const lf2 = { x: front2.x + left.dx, y: front2.y + left.dy };
-  const rf2 = { x: front2.x + right.dx, y: front2.y + right.dy };
+  // 左右 2×2：
+  const leftNear = {
+    x: front1.x + left.dx,
+    y: front1.y + left.dy
+  };
+  const rightNear = {
+    x: front1.x + right.dx,
+    y: front1.y + right.dy
+  };
+  const leftFar = {
+    x: front2.x + left.dx,
+    y: front2.y + left.dy
+  };
+  const rightFar = {
+    x: front2.x + right.dx,
+    y: front2.y + right.dy
+  };
 
   const size = room.map_size;
 
@@ -129,13 +143,18 @@ function updateViewCells() {
     return window.getShopName(room.seed, pos.x, pos.y);
   };
 
-  document.getElementById("front1").textContent = getName(front1);
-  document.getElementById("front2").textContent = getName(front2);
-  document.getElementById("leftFront1").textContent = getName(lf1);
-  document.getElementById("leftFront2").textContent = getName(lf2);
-  document.getElementById("rightFront1").textContent = getName(rf1);
-  document.getElementById("rightFront2").textContent = getName(rf2);
+  // 四格視野
+  const lnEl = document.getElementById("leftNear");
+  const lfEl = document.getElementById("leftFar");
+  const rnEl = document.getElementById("rightNear");
+  const rfEl = document.getElementById("rightFar");
 
+  if (lnEl) lnEl.textContent = getName(leftNear);
+  if (lfEl) lfEl.textContent = getName(leftFar);
+  if (rnEl) rnEl.textContent = getName(rightNear);
+  if (rfEl) rfEl.textContent = getName(rightFar);
+
+  // 自身所在交叉點附近代表店舖名（仍用 cell 索引 x,y 做命名）
   const hereName = window.getShopName(room.seed, x, y);
   const hereEl = document.getElementById("hereShop");
   if (hereEl) hereEl.textContent = hereName;
@@ -160,7 +179,7 @@ async function turn(dir) {
   updateViewCells();
 }
 
-// 前進一格（仍用 cell-based；第 2 步再改 edge-based）
+// 前進一格（暫時仍以 cell 為單位；牆仍用 cell-based）
 async function moveForward() {
   if (!selfPlayer || !room || !mapGrid) return;
 
