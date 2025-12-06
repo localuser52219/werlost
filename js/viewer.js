@@ -1,11 +1,14 @@
 // js/viewer.js
-// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方左右 2×2），HUD 顯示以玩家為中心九宮格
+// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方左右 2×2），HUD 九宮格 + 建築群集區域標示
 
 let room = null;
 let players = [];
 let pollTimer = null;
 let viewerStartTime = null;
 let mapGrid = null;
+let clusterAreas = []; // 每個元素：{ x0,y0,x1,y1,label }
+
+const CLUSTER_BLOCK = 5; // 必須與 shopName.js 內的 block 一致
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -59,6 +62,9 @@ async function joinViewer() {
   const size = room.map_size || 25;
   mapGrid = window.generateMap(room.seed, size);
 
+  // 建築群集預先計算
+  computeClusterAreas();
+
   await reloadPlayers();
 
   s.textContent = `房間 ${room.code}｜地圖 ${size}×${size}`;
@@ -83,7 +89,91 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 畫地圖：牆 → 格線 → 視野 → 玩家
+// 建築群集分類：根據店名內容大約判斷
+function classifyShopArea(shopName) {
+  if (!shopName) return "商舖區";
+  if (shopName.includes("玩具")) return "玩具區";
+  if (shopName.includes("咖啡") || shopName.includes("茶") || shopName.includes("飲品")) {
+    return "飲品區";
+  }
+  if (
+    shopName.includes("麵") || shopName.includes("湯") ||
+    shopName.includes("餐") || shopName.includes("早餐") ||
+    shopName.includes("點心") || shopName.includes("甜品") ||
+    shopName.includes("零食") || shopName.includes("水果")
+  ) {
+    return "食店區";
+  }
+  if (shopName.includes("書店") || shopName.includes("文具")) {
+    return "書文具區";
+  }
+  if (shopName.includes("藥房") || shopName.includes("診所")) {
+    return "藥房區";
+  }
+  return "商舖區";
+}
+
+// 預先計算 clusterAreas
+function computeClusterAreas() {
+  clusterAreas = [];
+  if (!room || !mapGrid) return;
+
+  const n = room.map_size || mapGrid.length;
+  const seed = room.seed;
+  const block = CLUSTER_BLOCK;
+
+  const clusterNx = Math.ceil(n / block);
+  const clusterNy = Math.ceil(n / block);
+
+  for (let cy = 0; cy < clusterNy; cy++) {
+    for (let cx = 0; cx < clusterNx; cx++) {
+      const x0 = cx * block;
+      const y0 = cy * block;
+      const x1 = Math.min((cx + 1) * block, n) - 1;
+      const y1 = Math.min((cy + 1) * block, n) - 1;
+
+      const samples = [];
+      for (let y = y0; y <= y1; y++) {
+        for (let x = x0; x <= x1; x++) {
+          if (window.isWall && window.isWall(mapGrid, x, y)) continue;
+          const name = window.getShopName(seed, x, y);
+          samples.push(name);
+          if (samples.length >= 6) break;
+        }
+        if (samples.length >= 6) break;
+      }
+
+      if (samples.length === 0) continue;
+
+      const count = {};
+      samples.forEach((nm) => {
+        const label = classifyShopArea(nm);
+        count[label] = (count[label] || 0) + 1;
+      });
+
+      let bestLabel = null;
+      let bestVal = -1;
+      Object.keys(count).forEach((k) => {
+        if (count[k] > bestVal) {
+          bestVal = count[k];
+          bestLabel = k;
+        }
+      });
+
+      if (!bestLabel) continue;
+
+      clusterAreas.push({
+        x0,
+        y0,
+        x1,
+        y1,
+        label: bestLabel
+      });
+    }
+  }
+}
+
+// 畫地圖：牆 → 格線 → 群集區域 → 視野 → 玩家
 function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
@@ -124,6 +214,9 @@ function drawMap() {
     ctx.stroke();
   }
 
+  // 建築群集半透明區域
+  drawClusterAreas(ctx, n, cell);
+
   // 視野（前方左右 2×2）
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
@@ -135,7 +228,44 @@ function drawMap() {
   });
 }
 
-// 視野：只畫四格（左前近／遠，右前近／遠）
+// 群集區域繪圖
+function drawClusterAreas(ctx, n, cell) {
+  if (!clusterAreas || !clusterAreas.length) return;
+
+  ctx.save();
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+  ctx.font = `${Math.max(10, cell - 6)}px sans-serif`;
+
+  clusterAreas.forEach((area) => {
+    const { x0, y0, x1, y1, label } = area;
+
+    let fillColor = "rgba(150,150,150,0.18)";
+    if (label === "玩具區") fillColor = "rgba(80,150,255,0.20)";
+    else if (label === "飲品區") fillColor = "rgba(255,180,80,0.20)";
+    else if (label === "食店區") fillColor = "rgba(255,120,120,0.20)";
+    else if (label === "書文具區") fillColor = "rgba(180,120,255,0.20)";
+    else if (label === "藥房區") fillColor = "rgba(120,220,160,0.20)";
+
+    const px = x0 * cell;
+    const py = y0 * cell;
+    const w = (x1 - x0 + 1) * cell;
+    const h = (y1 - y0 + 1) * cell;
+
+    ctx.fillStyle = fillColor;
+    ctx.fillRect(px, py, w, h);
+
+    const cx = px + w / 2;
+    const cy = py + h / 2;
+
+    ctx.fillStyle = "rgba(0,0,0,0.65)";
+    ctx.fillText(label, cx, cy);
+  });
+
+  ctx.restore();
+}
+
+// 視野：前方左右 2×2，與玩家端一致
 function drawPlayerFov(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const x0 = pos.x;
@@ -153,7 +283,6 @@ function drawPlayerFov(ctx, p, n, cell) {
   const d = p.direction;
   const forward = dirVec[d] || dirVec[0];
   const left = dirVec[(d + 3) % 4] || dirVec[3];
-  const right = dirVec[(d + 1) % 4] || dirVec[1];
 
   const front1 = { x: x0 + forward.dx, y: y0 + forward.dy };
   const front2 = { x: x0 + 2 * forward.dx, y: y0 + 2 * forward.dy };
@@ -163,16 +292,16 @@ function drawPlayerFov(ctx, p, n, cell) {
     y: front1.y + left.dy
   };
   const rightNear = {
-    x: front1.x + right.dx,
-    y: front1.y + right.dy
+    x: front1.x,
+    y: front1.y
   };
   const leftFar = {
     x: front2.x + left.dx,
     y: front2.y + left.dy
   };
   const rightFar = {
-    x: front2.x + right.dx,
-    y: front2.y + right.dy
+    x: front2.x,
+    y: front2.y
   };
 
   const cells = [leftNear, rightNear, leftFar, rightFar];
