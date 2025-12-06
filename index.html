@@ -1,12 +1,21 @@
-<!DOCTYPE html>
-<html lang="zh-Hant">
-  <head>
-    <meta charset="UTF-8" />
-    <title>迷路通信：玩家端</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- 玩家端專用樣式 -->
-    <link rel="stylesheet" href="css/player.css" />
-  </head>
+<head>
+  <meta charset="UTF-8" />
+  <title>迷路通信：玩家端</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <link rel="stylesheet" href="css/player.css" />
+
+<!-- 1. 載入 supabase-js（一定要最先）-->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<!-- 2. 初始化 Supabase client（使用 anon key） -->
+<script src="js/supabaseClient.js"></script>
+
+<!-- 3. 其它需要 supabase 的腳本 -->
+<script src="js/shopName.js"></script>
+<script src="js/player.js"></script>
+</head>
+
   <body>
     <div class="player-page">
       <!-- 上方：房間／角色／狀態 -->
@@ -101,9 +110,9 @@
       </main>
     </div>
 
-    <!-- JS：順序不能改，先 Supabase，再 shopName，再 player -->
-    <script src="js/supabaseClient.js"></script>
-    <script src="js/shopName.js"></script>
-    <script src="js/player.js"></script>
+<script src="js/supabaseClient.js"></script>
+<script src="js/shopName.js"></script>
+<script src="js/player.js"></script>
+
   </body>
 </html>
