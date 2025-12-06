@@ -52,100 +52,92 @@ border-color:rgba(99,102,241,.9);color:#fff}
   overflow:hidden;
 }
 
-.street-floor{
-  position:absolute;
-  inset:42% 0 0;
-  background:radial-gradient(circle at 50% 100%,#111827 0,#020617 60%);
-  clip-path:polygon(14% 100%,86% 100%,60% 40%,40% 40%);
-}
-
 /* 建築與店舖視角 ----------------------------------- */
 
-.building{position:absolute;inset:0;pointer-events:none}
-
-.building-left .block-far{
-  position:absolute;top:18%;left:34%;width:22%;height:20%;
-}
-.building-left .block-near{
-  position:absolute;top:46%;left:10%;width:32%;height:26%;
-}
-.building-right .block-far{
-  position:absolute;top:18%;right:34%;width:22%;height:20%;
-}
-.building-right .block-near{
-  position:absolute;top:46%;right:10%;width:32%;height:26%;
+/* 建築容器：只負責定位 */
+.building {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
 }
 
-/* 店名卡本體：保持矩形，不做梯形變形 */
+/* 左右四塊招牌：遠小近大，遠靠中、近靠外 */
 
-.block-inner{
-  position:absolute;inset:0;
-  padding:6px 8px;
-  border-radius:8px;
-  background:rgba(15,23,42,.96);
-  border:1px solid rgba(148,163,184,.9);
-  box-shadow:0 10px 18px rgba(0,0,0,.9);
-  display:flex;
-  flex-direction:column;
-  justify-content:center;
-  overflow:hidden;
-  z-index:1;
+.building-left .block-near {
+  position: absolute;
+  bottom: 18%;
+  left: 6%;
+  width: 32%;
+  height: 42%;
 }
 
-/* 牆面與屋頂：用 before/after 製造平行四邊形與消失點 */
-
-.block{position:absolute}
-
-.block::before{
-  content:"";
-  position:absolute;
-  left:-40%;right:-40%;bottom:-55%;height:120%;
-  background:linear-gradient(135deg,rgba(15,23,42,.9),rgba(3,7,18,1));
-  opacity:.9;
-  z-index:0;
+.building-left .block-far {
+  position: absolute;
+  bottom: 46%;
+  left: 30%;
+  width: 22%;
+  height: 30%;
 }
 
-.building-left .block::before{
-  clip-path:polygon(0 100%,100% 100%,75% 0,25% 0);
-}
-.building-right .block::before{
-  clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);
-}
-
-.block::after{
-  content:"";
-  position:absolute;
-  left:-30%;right:-30%;top:-45%;height:55%;
-  background:linear-gradient(135deg,rgba(148,163,184,.95),rgba(55,65,81,.9));
-  opacity:.9;
-  z-index:0;
+.building-right .block-near {
+  position: absolute;
+  bottom: 18%;
+  right: 6%;
+  width: 32%;
+  height: 42%;
 }
 
-/* 店舖文字：限制兩行，避免出界 */
-
-.shop-label{
-  font-size:11px;
-  color:rgba(203,213,225,.9);
-  letter-spacing:.14em;
+.building-right .block-far {
+  position: absolute;
+  bottom: 46%;
+  right: 30%;
+  width: 22%;
+  height: 30%;
 }
 
-.shop-name{
-  margin-top:2px;
-  font-size:14px;
-  font-weight:600;
-  color:#f9fafb;
-  line-height:1.25;
-  word-break:break-all;
-  max-height:2.6em;
-  overflow:hidden;
-  display:-webkit-box;
-  -webkit-line-clamp:2;
-  -webkit-box-orient:vertical;
+/* 招牌本體：永遠是直邊矩形，不做梯形 */
+
+.block-inner {
+  position: absolute;
+  inset: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  overflow: hidden;
 }
+
+/* 店舖文字：矩形內兩行上限 */
+
+.shop-label {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.9);
+  letter-spacing: 0.14em;
+}
+
+.shop-name {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f9fafb;
+  line-height: 1.25;
+  word-break: break-all;
+  max-height: 2.6em;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+}
+
+/* 遠方字少一級，強化遠近感 */
 
 .building-left .block-far .shop-name,
-.building-right .block-far .shop-name{
-  font-size:12px;
+.building-right .block-far .shop-name {
+  font-size: 12px;
 }
 
 /* 玩家所在路口與控制區 ---------------------------- */
