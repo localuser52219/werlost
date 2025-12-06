@@ -107,28 +107,27 @@ function updateViewCells() {
 
   const forward = dirVec[d];
   const left = dirVec[(d + 3) % 4];
-  const right = dirVec[(d + 1) % 4];
 
-  // 以玩家為基準計算前方 intersection，再掛到 cell 上：
+  // 前方「右側」一列
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
-  // 左右 2×2：
+  // 視野 2×2：左列 = 前列 + left；右列 = 前列本身
   const leftNear = {
     x: front1.x + left.dx,
     y: front1.y + left.dy
   };
   const rightNear = {
-    x: front1.x + right.dx,
-    y: front1.y + right.dy
+    x: front1.x,
+    y: front1.y
   };
   const leftFar = {
     x: front2.x + left.dx,
     y: front2.y + left.dy
   };
   const rightFar = {
-    x: front2.x + right.dx,
-    y: front2.y + right.dy
+    x: front2.x,
+    y: front2.y
   };
 
   const size = room.map_size;
@@ -143,7 +142,6 @@ function updateViewCells() {
     return window.getShopName(room.seed, pos.x, pos.y);
   };
 
-  // 四格視野
   const lnEl = document.getElementById("leftNear");
   const lfEl = document.getElementById("leftFar");
   const rnEl = document.getElementById("rightNear");
@@ -154,7 +152,6 @@ function updateViewCells() {
   if (rnEl) rnEl.textContent = getName(rightNear);
   if (rfEl) rfEl.textContent = getName(rightFar);
 
-  // 自身所在交叉點附近代表店舖名（仍用 cell 索引 x,y 做命名）
   const hereName = window.getShopName(room.seed, x, y);
   const hereEl = document.getElementById("hereShop");
   if (hereEl) hereEl.textContent = hereName;
