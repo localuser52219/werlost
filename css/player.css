@@ -111,8 +111,8 @@ border-color:rgba(99,102,241,.9);color:#fff}
 .building-left .block-far  .block-inner {
   clip-path: polygon(
     0% 20%,   /* 左上：比右上低 → 向外下垂 */
-    100% 0%,  /* 右上 */
-    100% 80%, /* 右下 */
+    50% 0%,  /* 右上 */
+    50% 80%, /* 右下 */
     0% 100%   /* 左下 */
   );
 }
