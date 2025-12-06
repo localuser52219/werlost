@@ -1,7 +1,5 @@
-/* player.css 最終版 */
-/* ============================================================
-   全局設定
-   ============================================================ */
+/* player.css 最終版帶立體感 */
+/* =============== 全局設定 =============== */
 
 *,
 *::before,
@@ -30,9 +28,7 @@ body {
   flex-direction: column;
 }
 
-/* ============================================================
-   Top Bar（房間、角色、狀態）
-   ============================================================ */
+/* =============== Top Bar =============== */
 
 .top-bar {
   display: flex;
@@ -95,9 +91,7 @@ body {
   color: #8be9ff;
 }
 
-/* ============================================================
-   Button 樣式
-   ============================================================ */
+/* =============== Buttons =============== */
 
 .btn {
   padding: 8px 14px;
@@ -122,9 +116,7 @@ body {
   color: #fff;
 }
 
-/* ============================================================
-   視野介面主體
-   ============================================================ */
+/* =============== 主體結構 =============== */
 
 .content {
   flex: 1;
@@ -140,9 +132,7 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* ============================================================
-   路口透視（核心 UI）
-   ============================================================ */
+/* =============== 路口透視區 =============== */
 
 .intersection {
   position: relative;
@@ -150,16 +140,38 @@ body {
   aspect-ratio: 1/1;
   margin: 0 auto;
   border-radius: 24px;
-  background: radial-gradient(circle at center, #121a28 0, #020617 60%, #000 100%);
+  background: radial-gradient(circle at 55% 20%, #1f2937 0, #020617 55%, #000 100%);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.9);
   overflow: hidden;
+  perspective: 900px;
 }
 
-/* 十字路（視角背景） */
+/* 地面透視線，模擬路向前伸展 */
+
+.intersection::before {
+  content: "";
+  position: absolute;
+  inset: 30% 18% 0;
+  background-image: linear-gradient(
+      to top,
+      rgba(148, 163, 184, 0.5) 0,
+      transparent 12%
+    ),
+    repeating-linear-gradient(
+      to top,
+      rgba(148, 163, 184, 0.4),
+      rgba(148, 163, 184, 0.4) 2px,
+      transparent 2px,
+      transparent 16px
+    );
+  opacity: 0.35;
+}
+
+/* 馬路本體 */
 
 .road {
   position: absolute;
-  background: radial-gradient(circle at center, #283445 0, #0e141e 70%);
+  background: radial-gradient(circle at center, #283445 0, #0b111b 70%);
   box-shadow: inset 0 0 0 1px rgba(180, 200, 230, 0.28);
 }
 
@@ -167,24 +179,22 @@ body {
   left: 50%;
   transform: translateX(-50%);
   width: 28%;
-  height: 110%;
+  height: 115%;
 }
 
 .road-horizontal {
-  top: 50%;
-  transform: translateY(-50%);
-  height: 26%;
-  width: 110%;
+  top: 60%;
+  transform: translateY(-50%) skewY(-6deg);
+  height: 24%;
+  width: 120%;
 }
 
-/* ============================================================
-   玩家所在路口（永遠在畫面最下面）
-   ============================================================ */
+/* =============== 玩家所在路口（下方） =============== */
 
 .you-are-here {
   position: absolute;
   left: 50%;
-  bottom: 6%;
+  bottom: 5%;
   transform: translateX(-50%);
   padding: 8px 10px;
   border-radius: 999px;
@@ -206,52 +216,55 @@ body {
   margin-top: 2px;
 }
 
-/* ============================================================
-   2×2 視野卡片（透視位置＋遠近大小差異）
-   ============================================================ */
+/* =============== 視野 2×2 店舖卡 =============== */
 
-/* 基本卡片底色 */
 .shop-card {
   position: absolute;
   padding: 6px 8px;
   border-radius: 14px;
-  background: rgba(15, 23, 42, 0.92);
+  background: rgba(15, 23, 42, 0.96);
   border: 1px solid rgba(148, 163, 184, 0.85);
-  box-shadow: 0 8px 16px rgba(10, 13, 20, 0.9);
+  box-shadow: 0 10px 20px rgba(10, 13, 20, 0.95);
   backdrop-filter: blur(6px);
   display: flex;
   flex-direction: column;
+  transform-origin: center bottom;
 }
 
-/* 近的一排（靠近畫面下方） → 顯示在玩家前方第一層 */
+/* 近一排：較大、較低 */
+
 .card-left-near {
-  left: 14%;
+  left: 13%;
   bottom: 32%;
   width: 46%;
+  transform: translateY(4px) rotateX(12deg);
 }
 
 .card-right-near {
-  right: 14%;
+  right: 13%;
   bottom: 32%;
   width: 46%;
+  transform: translateY(4px) rotateX(12deg);
 }
 
-/* 遠的一排（更上方） → 自然透視縮小 */
+/* 遠一排：較小、較高 */
+
 .card-left-far {
-  left: 18%;
-  bottom: 55%;
+  left: 19%;
+  bottom: 56%;
   width: 38%;
-  transform: scale(0.9);
+  transform: translateY(-4px) rotateX(18deg) scale(0.9);
 }
 
 .card-right-far {
-  right: 18%;
-  bottom: 55%;
+  right: 19%;
+  bottom: 56%;
   width: 38%;
-  transform: scale(0.9);
+  transform: translateY(-4px) rotateX(18deg) scale(0.9);
 }
 
-/* 文字 */
+/* 標籤與店名，控制不出界 */
+
 .shop-label {
   font-size: 11px;
   color: rgba(160, 174, 192, 0.9);
@@ -262,23 +275,32 @@ body {
   font-size: 14px;
   font-weight: 600;
   color: #e5e7eb;
-  word-break: break-word;
+  word-break: break-all;
+  line-height: 1.25;
+  max-height: 2.5em;           /* 約兩行 */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;       /* 限制兩行 */
+  -webkit-box-orient: vertical;
 }
 
-/* 遠方較小字體 */
+/* 遠方卡片字略小，防止擠出邊界 */
+
 .card-left-far .shop-name,
 .card-right-far .shop-name {
   font-size: 12px;
 }
 
-/* ============================================================
-   行動按鈕區
-   ============================================================ */
+/* =============== 控制區 =============== */
 
 .controls-section {
   padding: 14px;
   border-radius: 16px;
-  background: linear-gradient(135deg, rgba(15, 23, 42, 0.95), rgba(37, 99, 235, 0.4));
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.95),
+    rgba(37, 99, 235, 0.4)
+  );
   box-shadow: 0 14px 26px rgba(10, 13, 20, 0.9);
 }
 
@@ -297,9 +319,7 @@ body {
   color: rgba(210, 220, 235, 0.85);
 }
 
-/* ============================================================
-   RWD
-   ============================================================ */
+/* =============== RWD =============== */
 
 @media (max-width: 768px) {
   .intersection {
