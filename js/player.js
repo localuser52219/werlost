@@ -39,6 +39,29 @@ function getPlayerPos(p) {
   return { x: px, y: py };
 }
 
+// 旋轉相對座標，讓「向北」的 offset 轉到東南西
+// dir = 0:北, 1:東, 2:南, 3:西
+// 以畫面座標為準（x 右增, y 下增），北 = (0,-1)
+function rotateOffset(dx, dy, dir) {
+  let rx = dx;
+  let ry = dy;
+
+  if (dir === 1) {
+    // 旋轉 90 度順時針
+    rx = dy;
+    ry = -dx;
+  } else if (dir === 2) {
+    // 旋轉 180 度
+    rx = -dx;
+    ry = -dy;
+  } else if (dir === 3) {
+    // 旋轉 90 度逆時針
+    rx = -dy;
+    ry = dx;
+  }
+  return { dx: rx, dy: ry };
+}
+
 // 加入房間
 async function joinRoom() {
   const code = document.getElementById("roomCode").value.trim();
@@ -98,61 +121,55 @@ function updateViewCells() {
   const y = pos.y;
   const d = selfPlayer.direction; // 0北 1東 2南 3西
 
-  const dirVec = [
-    { dx: 0, dy: -1 }, // 北
-    { dx: 1, dy: 0 },  // 東
-    { dx: 0, dy: 1 },  // 南
-    { dx: -1, dy: 0 }  // 西
-  ];
-
-  const forward = dirVec[d];
-  const left = dirVec[(d + 3) % 4];
-
-  // 以交叉點為基準，前方「右側」一列
-  const front1 = { x: x + forward.dx, y: y + forward.dy };
-  const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
-
-  // 視野 2×2：左列 = 前列 + left；右列 = 前列本身
-  const leftNear = {
-    x: front1.x + left.dx,
-    y: front1.y + left.dy
-  };
-  const rightNear = {
-    x: front1.x,
-    y: front1.y
-  };
-  const leftFar = {
-    x: front2.x + left.dx,
-    y: front2.y + left.dy
-  };
-  const rightFar = {
-    x: front2.x,
-    y: front2.y
+  // 以「向北」為基準定義 2×2 視野相對座標：
+  // 左前近：(-1, -1)
+  // 右前近：( 0, -1)
+  // 左前遠：(-1, -2)
+  // 右前遠：( 0, -2)
+  const baseOffsets = {
+    leftNear:  { dx: -1, dy: -1 },
+    rightNear: { dx:  0, dy: -1 },
+    leftFar:   { dx: -1, dy: -2 },
+    rightFar:  { dx:  0, dy: -2 }
   };
 
   const size = room.map_size;
 
-  const getName = (pos) => {
-    if (pos.x < 0 || pos.x >= size || pos.y < 0 || pos.y >= size) {
+  const getName = (cx, cy) => {
+    if (cx < 0 || cx >= size || cy < 0 || cy >= size) {
       return "界外";
     }
-    if (window.isWall(mapGrid, pos.x, pos.y)) {
+    if (window.isWall(mapGrid, cx, cy)) {
       return "牆壁";
     }
-    return window.getShopName(room.seed, pos.x, pos.y);
+    return window.getShopName(room.seed, cx, cy);
   };
+
+  // 將「向北」的 offset 旋轉到當前方向
+  const lnOff = rotateOffset(baseOffsets.leftNear.dx, baseOffsets.leftNear.dy, d);
+  const rnOff = rotateOffset(baseOffsets.rightNear.dx, baseOffsets.rightNear.dy, d);
+  const lfOff = rotateOffset(baseOffsets.leftFar.dx, baseOffsets.leftFar.dy, d);
+  const rfOff = rotateOffset(baseOffsets.rightFar.dx, baseOffsets.rightFar.dy, d);
+
+  const leftNearX  = x + lnOff.dx;
+  const leftNearY  = y + lnOff.dy;
+  const rightNearX = x + rnOff.dx;
+  const rightNearY = y + rnOff.dy;
+  const leftFarX   = x + lfOff.dx;
+  const leftFarY   = y + lfOff.dy;
+  const rightFarX  = x + rfOff.dx;
+  const rightFarY  = y + rfOff.dy;
 
   const lnEl = document.getElementById("leftNear");
   const lfEl = document.getElementById("leftFar");
   const rnEl = document.getElementById("rightNear");
   const rfEl = document.getElementById("rightFar");
 
-  if (lnEl) lnEl.textContent = getName(leftNear);
-  if (lfEl) lfEl.textContent = getName(leftFar);
-  if (rnEl) rnEl.textContent = getName(rightNear);
-  if (rfEl) rfEl.textContent = getName(rightFar);
+  if (lnEl) lnEl.textContent = getName(leftNearX, leftNearY);
+  if (lfEl) lfEl.textContent = getName(leftFarX, leftFarY);
+  if (rnEl) rnEl.textContent = getName(rightNearX, rightNearY);
+  if (rfEl) rfEl.textContent = getName(rightFarX, rightFarY);
 
-  // 自身位置：交叉點，沒有店舖名
   const hereEl = document.getElementById("hereShop");
   if (hereEl) hereEl.textContent = "交叉路口";
 }
