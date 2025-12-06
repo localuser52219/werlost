@@ -1,0 +1,323 @@
+/* css/player.css */
+/* 基本排版與色系：偏深色，令道路與店舖卡片突出 */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "PingFang TC", "Microsoft JhengHei", sans-serif;
+  background: radial-gradient(circle at top, #202739 0, #050812 55%, #000 100%);
+  color: #f5f5f5;
+}
+
+body {
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+}
+
+.player-page {
+  width: 100%;
+  max-width: 1200px;
+  min-height: 100vh;
+  padding: 16px 20px 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Top bar */
+
+.top-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  margin-bottom: 16px;
+}
+
+.top-bar-left {
+  min-width: 0;
+}
+
+.app-title {
+  margin: 0;
+  font-size: 24px;
+  letter-spacing: 0.08em;
+}
+
+.app-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.top-bar-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.field-label {
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.input {
+  min-width: 90px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background-color: rgba(3, 7, 18, 0.9);
+  color: #f5f5f5;
+  font-size: 13px;
+}
+
+.input::placeholder {
+  color: rgba(255, 255, 255, 0.4);
+}
+
+.status-text {
+  min-width: 120px;
+  font-size: 12px;
+  color: #8be9ff;
+  text-align: right;
+}
+
+/* Buttons */
+
+.btn {
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(148, 163, 184, 0.7);
+  background: rgba(15, 23, 42, 0.95);
+  color: #e5e7eb;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease, box-shadow 0.15s ease;
+  white-space: nowrap;
+}
+
+.btn:hover {
+  background: rgba(30, 64, 175, 0.9);
+  box-shadow: 0 0 12px rgba(59, 130, 246, 0.8);
+  transform: translateY(-1px);
+}
+
+.btn:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.btn.primary {
+  border-color: rgba(59, 130, 246, 0.95);
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: #f9fafb;
+}
+
+/* Main layout */
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  margin-top: 8px;
+}
+
+.section-title {
+  margin: 0 0 8px;
+  font-size: 16px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: rgba(248, 250, 252, 0.9);
+}
+
+.view-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* 路口視角區 */
+
+.intersection {
+  position: relative;
+  width: min(90vw, 520px);
+  aspect-ratio: 1 / 1;
+  margin-top: 4px;
+  border-radius: 24px;
+  background: radial-gradient(circle at center, #111827 0, #020617 60%, #000 100%);
+  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.9);
+  overflow: hidden;
+}
+
+/* 馬路：用兩條十字路代表十字路口 */
+
+.road {
+  position: absolute;
+  background: radial-gradient(circle at center, #1f2933 0, #020617 75%);
+  box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.3);
+}
+
+.road-vertical {
+  left: 50%;
+  transform: translateX(-50%);
+  width: 26%;
+  height: 110%;
+}
+
+.road-horizontal {
+  top: 50%;
+  transform: translateY(-50%);
+  height: 26%;
+  width: 110%;
+}
+
+/* 中央路口標記 */
+
+.you-are-here {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: radial-gradient(circle at top, #f97316 0, #ea580c 40%, #7c2d12 100%);
+  box-shadow: 0 0 16px rgba(249, 115, 22, 0.9);
+  text-align: center;
+  min-width: 140px;
+}
+
+.here-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: #fffbeb;
+}
+
+.here-name {
+  margin-top: 2px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+/* 店舖卡片：四個街角位置 */
+
+.shop-card {
+  position: absolute;
+  width: 44%;
+  max-width: 210px;
+  padding: 6px 8px;
+  border-radius: 12px;
+  background: rgba(15, 23, 42, 0.92);
+  border: 1px solid rgba(148, 163, 184, 0.8);
+  box-shadow: 0 8px 16px rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* 位置：以中央為原點作視覺佈局 */
+.card-left-near {
+  left: 10%;
+  top: 55%;
+}
+
+.card-right-near {
+  right: 10%;
+  top: 55%;
+}
+
+.card-left-far {
+  left: 10%;
+  top: 18%;
+}
+
+.card-right-far {
+  right: 10%;
+  top: 18%;
+}
+
+/* 標籤＋店名 */
+
+.shop-label {
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.9);
+}
+
+.shop-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e5e7eb;
+  word-break: break-all;
+}
+
+/* 控制區 */
+
+.controls-section {
+  border-radius: 16px;
+  padding: 14px 16px 12px;
+  background: linear-gradient(
+    135deg,
+    rgba(15, 23, 42, 0.95),
+    rgba(30, 64, 175, 0.75)
+  );
+  box-shadow: 0 14px 26px rgba(15, 23, 42, 0.9);
+}
+
+.controls-row {
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+
+.hint-text {
+  margin: 10px 0 0;
+  font-size: 12px;
+  text-align: center;
+  color: rgba(241, 245, 249, 0.85);
+}
+
+/* RWD */
+
+@media (max-width: 768px) {
+  .top-bar {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .top-bar-right {
+    justify-content: flex-start;
+  }
+
+  .intersection {
+    width: min(100vw - 32px, 480px);
+  }
+
+  .shop-card {
+    width: 46%;
+  }
+}
