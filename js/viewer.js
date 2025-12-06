@@ -8,7 +8,7 @@ let viewerStartTime = null;
 let mapGrid = null;
 let clusterAreas = [];
 
-const CLUSTER_BLOCK = 5; // 必須與 shopName.js 內的 block 一致
+const CLUSTER_BLOCK = 5; // 必須與 shopName.js 一致
 
 document.addEventListener("DOMContentLoaded", () => {
   const joinBtn = document.getElementById("joinViewer");
@@ -30,33 +30,41 @@ function getPlayerPos(p) {
   return { x: px, y: py };
 }
 
-// 旋轉 cell offset（以「向北」為基準）：dir=0北,1東,2南,3西
-function rotateOffset(dx, dy, dir) {
-  if (dir === 0) return { dx, dy };                // 北
-  if (dir === 1) return { dx: -dy, dy: dx };       // 東（順時針90）
-  if (dir === 2) return { dx: -dx, dy: -dy };      // 南（180）
-  return { dx: dy, dy: -dx };                      // 西（逆時針90）
-}
-
-// 以交叉點 (ix,iy) 為原點的 2×2 視野 cell 座標（與 player.js 相同）
+// 與 player.js 完全一致的視野函式
 function getFovCells(ix, iy, dir) {
-  const base = {
-    leftNear:  { dx: -1, dy: -1 },
-    rightNear: { dx:  0, dy: -1 },
-    leftFar:   { dx: -1, dy: -2 },
-    rightFar:  { dx:  0, dy: -2 }
-  };
-  const ln = rotateOffset(base.leftNear.dx, base.leftNear.dy, dir);
-  const rn = rotateOffset(base.rightNear.dx, base.rightNear.dy, dir);
-  const lf = rotateOffset(base.leftFar.dx, base.leftFar.dy, dir);
-  const rf = rotateOffset(base.rightFar.dx, base.rightFar.dy, dir);
-
-  return {
-    leftNear:  { x: ix + ln.dx, y: iy + ln.dy },
-    rightNear: { x: ix + rn.dx, y: iy + rn.dy },
-    leftFar:   { x: ix + lf.dx, y: iy + lf.dy },
-    rightFar:  { x: ix + rf.dx, y: iy + rf.dy }
-  };
+  if (dir === 0) {
+    // 北
+    return {
+      leftNear:  { x: ix - 1, y: iy - 1 },
+      rightNear: { x: ix,     y: iy - 1 },
+      leftFar:   { x: ix - 1, y: iy - 2 },
+      rightFar:  { x: ix,     y: iy - 2 }
+    };
+  } else if (dir === 1) {
+    // 東
+    return {
+      leftNear:  { x: ix,     y: iy - 1 },
+      rightNear: { x: ix,     y: iy     },
+      leftFar:   { x: ix + 1, y: iy - 1 },
+      rightFar:  { x: ix + 1, y: iy     }
+    };
+  } else if (dir === 2) {
+    // 南
+    return {
+      leftNear:  { x: ix,     y: iy     },
+      rightNear: { x: ix - 1, y: iy     },
+      leftFar:   { x: ix,     y: iy + 1 },
+      rightFar:  { x: ix - 1, y: iy + 1 }
+    };
+  } else {
+    // 西
+    return {
+      leftNear:  { x: ix - 1, y: iy     },
+      rightNear: { x: ix - 1, y: iy - 1 },
+      leftFar:   { x: ix - 2, y: iy     },
+      rightFar:  { x: ix - 2, y: iy - 1 }
+    };
+  }
 }
 
 // ===== 建築群集分類與計算 =====
@@ -214,7 +222,7 @@ function drawMap() {
   const cvs = document.getElementById("mapCanvas");
   if (!cvs) return;
   const ctx = cvs.getContext("2d");
-  const n = room.map_size || mapGrid.length || 25; // 格子數
+  const n = room.map_size || mapGrid.length || 25;
   const cell = 20;
 
   cvs.width = n * cell;
@@ -236,7 +244,7 @@ function drawMap() {
     }
   }
 
-  // 格線（0..n），交叉點落在線交點
+  // 格線（交叉點 0..n）
   ctx.strokeStyle = "#aaa";
   for (let i = 0; i <= n; i++) {
     ctx.beginPath();
@@ -253,7 +261,7 @@ function drawMap() {
   // 建築群集
   drawClusterAreas(ctx, n, cell);
 
-  // 視野（前方左右 2×2）
+  // 視野
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
@@ -307,11 +315,9 @@ function drawPlayerFov(ctx, p, n, cell) {
   const iy = pos.y;
   const dir = p.direction || 0;
 
-  // 交叉點範圍 0..n，這裡只檢查合理區間
   if (ix < 0 || ix > n || iy < 0 || iy > n) return;
 
   const cells = getFovCells(ix, iy, dir);
-
   const list = [
     cells.leftNear,
     cells.rightNear,
@@ -327,7 +333,6 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.fillStyle = fillColor;
 
   list.forEach((c) => {
-    // 視野是格子，索引 0..n-1
     if (c.x < 0 || c.x >= n || c.y < 0 || c.y >= n) return;
     ctx.fillRect(c.x * cell + 1, c.y * cell + 1, cell - 2, cell - 2);
   });
