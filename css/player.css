@@ -196,8 +196,8 @@ body {
 .you-are-here {
   position: absolute;
   left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
+  bottom: 6%;           /* 原本是 top: 50%; */
+  transform: translateX(-50%);
   padding: 8px 10px;
   border-radius: 999px;
   background: radial-gradient(circle at top, #f97316 0, #ea580c 40%, #7c2d12 100%);
@@ -205,6 +205,7 @@ body {
   text-align: center;
   min-width: 140px;
 }
+
 
 .here-label {
   font-size: 11px;
@@ -219,11 +220,9 @@ body {
   font-weight: 600;
 }
 
-/* 店舖卡片：四個街角位置 */
-
+/* 統一基礎樣式 */
 .shop-card {
   position: absolute;
-  width: 44%;
   max-width: 210px;
   padding: 6px 8px;
   border-radius: 12px;
@@ -236,26 +235,28 @@ body {
   gap: 2px;
 }
 
-/* 位置：以中央為原點作視覺佈局 */
-.card-left-near {
-  left: 10%;
-  top: 55%;
-}
-
+/* 近：比較寬、文字較大 */
+.card-left-near,
 .card-right-near {
-  right: 10%;
-  top: 55%;
+  width: 46%;
 }
 
-.card-left-far {
-  left: 10%;
-  top: 18%;
+.card-left-near .shop-name,
+.card-right-near .shop-name {
+  font-size: 14px;
 }
 
+/* 遠：比較窄、文字稍細 */
+.card-left-far,
 .card-right-far {
-  right: 10%;
-  top: 18%;
+  width: 38%;
 }
+
+.card-left-far .shop-name,
+.card-right-far .shop-name {
+  font-size: 12px;
+}
+
 
 /* 標籤＋店名 */
 
