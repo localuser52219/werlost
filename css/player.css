@@ -1,6 +1,6 @@
-/* player.css 最終版帶立體感 */
-/* =============== 全局設定 =============== */
+/* player.css：依手繪圖重構的立體視角 */
 
+/* ========== 全局 ========== */
 *,
 *::before,
 *::after {
@@ -28,7 +28,7 @@ body {
   flex-direction: column;
 }
 
-/* =============== Top Bar =============== */
+/* ========== Top bar ========== */
 
 .top-bar {
   display: flex;
@@ -91,7 +91,7 @@ body {
   color: #8be9ff;
 }
 
-/* =============== Buttons =============== */
+/* ========== Buttons ========== */
 
 .btn {
   padding: 8px 14px;
@@ -116,7 +116,7 @@ body {
   color: #fff;
 }
 
-/* =============== 主體結構 =============== */
+/* ========== 主體結構 ========== */
 
 .content {
   flex: 1;
@@ -132,7 +132,7 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* =============== 路口透視區 =============== */
+/* ========== 路口透視 ========== */
 
 .intersection {
   position: relative;
@@ -140,61 +140,138 @@ body {
   aspect-ratio: 1/1;
   margin: 0 auto;
   border-radius: 24px;
-  background: radial-gradient(circle at 55% 20%, #1f2937 0, #020617 55%, #000 100%);
+  background: radial-gradient(circle at 40% 15%, #1f2937 0, #020617 55%, #000 100%);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.9);
   overflow: hidden;
-  perspective: 900px;
+  perspective: 1000px;
 }
 
-/* 地面透視線，模擬路向前伸展 */
+/* 中央道路：兩側收窄的透視梯形 */
+.street-floor {
+  position: absolute;
+  inset: 40% 0 0;
+  background: radial-gradient(circle at 50% 100%, #111827 0, #020617 60%);
+  clip-path: polygon(14% 100%, 86% 100%, 62% 40%, 38% 40%);
+}
 
-.intersection::before {
+/* ========== 左右轉角樓 ========== */
+
+.building {
+  position: absolute;
+  top: 6%;
+  bottom: 16%;
+  width: 40%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  pointer-events: none;
+}
+
+.building-left {
+  left: 0;
+  align-items: flex-end;
+}
+
+.building-right {
+  right: 0;
+  align-items: flex-start;
+}
+
+/* 每幢樓分兩層：遠（花店）在上，近（食店）在下 */
+
+.block {
+  position: relative;
+  width: 80%;
+  margin-bottom: 8%;
+}
+
+.block-far {
+  height: 26%;
+}
+
+.block-near {
+  height: 32%;
+}
+
+/* 立體牆面本體 */
+.block-inner {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #1f2937, #020617);
+  border: 1px solid rgba(148, 163, 184, 0.9);
+  box-shadow: 0 12px 18px rgba(0, 0, 0, 0.9);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  transform-origin: bottom;
+  overflow: hidden;
+}
+
+/* 左右兩邊用不同方向的傾斜模擬透視 */
+.building-left .block-inner {
+  transform: skewY(-16deg);
+}
+
+.building-right .block-inner {
+  transform: skewY(16deg);
+}
+
+/* 上方延伸屋頂，對應你畫的「T 字形」水平面 */
+.block-inner::before {
   content: "";
   position: absolute;
-  inset: 30% 18% 0;
-  background-image: linear-gradient(
-      to top,
-      rgba(148, 163, 184, 0.5) 0,
-      transparent 12%
-    ),
-    repeating-linear-gradient(
-      to top,
-      rgba(148, 163, 184, 0.4),
-      rgba(148, 163, 184, 0.4) 2px,
-      transparent 2px,
-      transparent 16px
-    );
-  opacity: 0.35;
+  left: 0;
+  right: 0;
+  top: -30%;
+  height: 40%;
+  background: linear-gradient(
+    135deg,
+    rgba(148, 163, 184, 0.9),
+    rgba(55, 65, 81, 0.95)
+  );
+  transform-origin: bottom;
+  transform: skewY(12deg);
+  opacity: 0.9;
 }
 
-/* 馬路本體 */
+/* ========== 店舖文字，避免溢出 ========== */
 
-.road {
-  position: absolute;
-  background: radial-gradient(circle at center, #283445 0, #0b111b 70%);
-  box-shadow: inset 0 0 0 1px rgba(180, 200, 230, 0.28);
+.shop-label {
+  font-size: 11px;
+  color: rgba(203, 213, 225, 0.9);
+  letter-spacing: 0.14em;
 }
 
-.road-vertical {
-  left: 50%;
-  transform: translateX(-50%);
-  width: 28%;
-  height: 115%;
+.shop-name {
+  margin-top: 2px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #f9fafb;
+  line-height: 1.25;
+  word-break: break-all;
+  max-height: 2.6em;              /* 約 2 行 */
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;          /* 限制為兩行 */
+  -webkit-box-orient: vertical;
 }
 
-.road-horizontal {
-  top: 60%;
-  transform: translateY(-50%) skewY(-6deg);
-  height: 24%;
-  width: 120%;
+/* 遠處的樓層字稍小，看起來更遠 */
+.block-far .shop-name {
+  font-size: 12px;
 }
 
-/* =============== 玩家所在路口（下方） =============== */
+/* ========== 玩家所在路口（畫面最下方中央） ========== */
 
 .you-are-here {
   position: absolute;
   left: 50%;
-  bottom: 5%;
+  bottom: 6%;
   transform: translateX(-50%);
   padding: 8px 10px;
   border-radius: 999px;
@@ -216,82 +293,7 @@ body {
   margin-top: 2px;
 }
 
-/* =============== 視野 2×2 店舖卡 =============== */
-
-.shop-card {
-  position: absolute;
-  padding: 6px 8px;
-  border-radius: 14px;
-  background: rgba(15, 23, 42, 0.96);
-  border: 1px solid rgba(148, 163, 184, 0.85);
-  box-shadow: 0 10px 20px rgba(10, 13, 20, 0.95);
-  backdrop-filter: blur(6px);
-  display: flex;
-  flex-direction: column;
-  transform-origin: center bottom;
-}
-
-/* 近一排：較大、較低 */
-
-.card-left-near {
-  left: 13%;
-  bottom: 32%;
-  width: 46%;
-  transform: translateY(4px) rotateX(12deg);
-}
-
-.card-right-near {
-  right: 13%;
-  bottom: 32%;
-  width: 46%;
-  transform: translateY(4px) rotateX(12deg);
-}
-
-/* 遠一排：較小、較高 */
-
-.card-left-far {
-  left: 19%;
-  bottom: 56%;
-  width: 38%;
-  transform: translateY(-4px) rotateX(18deg) scale(0.9);
-}
-
-.card-right-far {
-  right: 19%;
-  bottom: 56%;
-  width: 38%;
-  transform: translateY(-4px) rotateX(18deg) scale(0.9);
-}
-
-/* 標籤與店名，控制不出界 */
-
-.shop-label {
-  font-size: 11px;
-  color: rgba(160, 174, 192, 0.9);
-  letter-spacing: 0.12em;
-}
-
-.shop-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: #e5e7eb;
-  word-break: break-all;
-  line-height: 1.25;
-  max-height: 2.5em;           /* 約兩行 */
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;       /* 限制兩行 */
-  -webkit-box-orient: vertical;
-}
-
-/* 遠方卡片字略小，防止擠出邊界 */
-
-.card-left-far .shop-name,
-.card-right-far .shop-name {
-  font-size: 12px;
-}
-
-/* =============== 控制區 =============== */
+/* ========== 控制區 ========== */
 
 .controls-section {
   padding: 14px;
@@ -319,19 +321,14 @@ body {
   color: rgba(210, 220, 235, 0.85);
 }
 
-/* =============== RWD =============== */
+/* ========== RWD ========== */
 
 @media (max-width: 768px) {
   .intersection {
     width: min(92vw, 460px);
   }
 
-  .shop-card {
-    padding: 6px;
-  }
-
-  .card-left-near,
-  .card-right-near {
-    width: 48%;
+  .block {
+    width: 88%;
   }
 }
