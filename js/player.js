@@ -41,33 +41,52 @@ function getPlayerPos(p) {
   return { x: px, y: py };
 }
 
-// 旋轉 cell offset（以「向北」為基準）：dir=0北,1東,2南,3西
-function rotateOffset(dx, dy, dir) {
-  if (dir === 0) return { dx, dy };                // 北
-  if (dir === 1) return { dx: -dy, dy: dx };       // 東（順時針90）
-  if (dir === 2) return { dx: -dx, dy: -dy };      // 南（180）
-  return { dx: dy, dy: -dx };                      // 西（逆時針90）
-}
-
 // 以交叉點 (ix,iy) 為原點的 2×2 視野 cell 座標
+// dir: 0=北,1=東,2=南,3=西
+// 左/右以玩家面向為基準
 function getFovCells(ix, iy, dir) {
-  const base = {
-    leftNear:  { dx: -1, dy: -1 },
-    rightNear: { dx:  0, dy: -1 },
-    leftFar:   { dx: -1, dy: -2 },
-    rightFar:  { dx:  0, dy: -2 }
-  };
-  const ln = rotateOffset(base.leftNear.dx, base.leftNear.dy, dir);
-  const rn = rotateOffset(base.rightNear.dx, base.rightNear.dy, dir);
-  const lf = rotateOffset(base.leftFar.dx, base.leftFar.dy, dir);
-  const rf = rotateOffset(base.rightFar.dx, base.rightFar.dy, dir);
+  // map_size = n（格子數），cell 索引 0..n-1，交叉點索引 0..n
+  // 交叉點 (ix,iy) 相鄰的四格：
+  //   NW: (ix-1,iy-1), NE:(ix,iy-1), SW:(ix-1,iy), SE:(ix,iy)
 
-  return {
-    leftNear:  { x: ix + ln.dx, y: iy + ln.dy },
-    rightNear: { x: ix + rn.dx, y: iy + rn.dy },
-    leftFar:   { x: ix + lf.dx, y: iy + lf.dy },
-    rightFar:  { x: ix + rf.dx, y: iy + rf.dy }
-  };
+  if (dir === 0) {
+    // 向北：前方是上方兩格列
+    return {
+      leftNear:  { x: ix - 1, y: iy - 1 }, // 西側
+      rightNear: { x: ix,     y: iy - 1 }, // 東側
+      leftFar:   { x: ix - 1, y: iy - 2 },
+      rightFar:  { x: ix,     y: iy - 2 }
+    };
+  } else if (dir === 1) {
+    // 向東：前方是右邊兩格列
+    // 近排：上(左)是 (ix,iy-1)；下(右)是 (ix,iy)
+    return {
+      leftNear:  { x: ix,     y: iy - 1 }, // 面向東時，左邊 = 北（上）
+      rightNear: { x: ix,     y: iy     }, // 右邊 = 南（下）
+      leftFar:   { x: ix + 1, y: iy - 1 },
+      rightFar:  { x: ix + 1, y: iy     }
+    };
+  } else if (dir === 2) {
+    // 向南：前方是下方兩格列
+    // 近排：左格 (ix,iy)，右格 (ix-1,iy)，但以玩家視角：
+    // 面向南時，左邊 = 東（世界的右）
+    return {
+      leftNear:  { x: ix,     y: iy     }, // 左 = 東
+      rightNear: { x: ix - 1, y: iy     }, // 右 = 西
+      leftFar:   { x: ix,     y: iy + 1 },
+      rightFar:  { x: ix - 1, y: iy + 1 }
+    };
+  } else {
+    // dir === 3，向西：前方是左邊兩格列
+    // 近排：上格 (ix-1,iy-1)，下格 (ix-1,iy)
+    // 面向西時，左邊 = 南（下）
+    return {
+      leftNear:  { x: ix - 1, y: iy     }, // 左 = 南
+      rightNear: { x: ix - 1, y: iy - 1 }, // 右 = 北
+      leftFar:   { x: ix - 2, y: iy     },
+      rightFar:  { x: ix - 2, y: iy - 1 }
+    };
+  }
 }
 
 // 交叉點移動：牆在格子上，只有「兩側 cell 都是牆」才封死
@@ -79,26 +98,26 @@ function canMove(ix, iy, dir) {
   else if (dir === 2) ny++;  // 南
   else if (dir === 3) nx--;  // 西
 
-  // 交叉點範圍應為 0..n（允許在最外一圈交叉點行走）
+  // 交叉點範圍 0..n
   if (nx < 0 || nx > n || ny < 0 || ny > n) return null;
 
   let c1, c2;
-  if (dir === 0) {          // 北：線段在兩個 cell 之間的水平邊上
+  if (dir === 0) {          // 北：水平邊之下方兩 cell
     c1 = { x: ix - 1, y: iy - 1 };
     c2 = { x: ix,     y: iy - 1 };
-  } else if (dir === 1) {   // 東：垂直邊
+  } else if (dir === 1) {   // 東：垂直邊之右側兩 cell
     c1 = { x: ix, y: iy - 1 };
     c2 = { x: ix, y: iy     };
-  } else if (dir === 2) {   // 南
+  } else if (dir === 2) {   // 南：水平邊之上方兩 cell
     c1 = { x: ix - 1, y: iy };
     c2 = { x: ix,     y: iy };
-  } else {                  // 西
+  } else {                  // 西：垂直邊之左側兩 cell
     c1 = { x: ix - 1, y: iy - 1 };
     c2 = { x: ix - 1, y: iy     };
   }
 
   const isWallCell = (c) => {
-    if (c.x < 0 || c.x >= n || c.y < 0 || c.y >= n) return true; // 界外視為牆
+    if (c.x < 0 || c.x >= n || c.y < 0 || c.y >= n) return true; // 界外當牆
     return window.isWall(mapGrid, c.x, c.y);
   };
 
