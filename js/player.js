@@ -1,5 +1,5 @@
 // js/player.js
-// 玩家端：加入房間、顯示前方左右 2×2 視野 + 自身店舖名、移動（用 ix/iy）
+// 玩家端：加入房間、顯示前方左右 2×2 視野 + 自身位置為交叉路口、移動（用 ix/iy）
 
 let room = null;
 let selfPlayer = null;
@@ -89,7 +89,7 @@ async function joinRoom() {
   updateViewCells();
 }
 
-// 更新視野：前方左右 2×2 四格 + 自身位置名
+// 更新視野：前方左右 2×2 四格 + 自身位置僅顯示為交叉路口
 function updateViewCells() {
   if (!room || !selfPlayer || !mapGrid) return;
 
@@ -108,7 +108,7 @@ function updateViewCells() {
   const forward = dirVec[d];
   const left = dirVec[(d + 3) % 4];
 
-  // 前方「右側」一列
+  // 以交叉點為基準，前方「右側」一列
   const front1 = { x: x + forward.dx, y: y + forward.dy };
   const front2 = { x: x + 2 * forward.dx, y: y + 2 * forward.dy };
 
@@ -152,9 +152,9 @@ function updateViewCells() {
   if (rnEl) rnEl.textContent = getName(rightNear);
   if (rfEl) rfEl.textContent = getName(rightFar);
 
-  const hereName = window.getShopName(room.seed, x, y);
+  // 自身位置：交叉點，沒有店舖名
   const hereEl = document.getElementById("hereShop");
-  if (hereEl) hereEl.textContent = hereName;
+  if (hereEl) hereEl.textContent = "交叉路口";
 }
 
 // 轉向
