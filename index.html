@@ -48,45 +48,56 @@
 
       <main class="content">
         <!-- 中間：路口視角 -->
-        <section class="view-section">
-          <h2 class="section-title">目前街口視野</h2>
-          <div class="intersection">
-            <!-- 垂直馬路 -->
-            <div class="road road-vertical"></div>
-            <!-- 水平馬路 -->
-            <div class="road road-horizontal"></div>
+<section class="view-section">
+  <h2 class="section-title">目前街口視野</h2>
+  <div class="intersection">
+    <!-- 中央街道地面 -->
+    <div class="street-floor"></div>
 
-            <!-- 左前遠 -->
-            <div class="shop-card card-left-far">
-              <div class="shop-label">左前遠</div>
-              <div class="shop-name" id="leftFar">—</div>
-            </div>
+    <!-- 左側轉角樓 -->
+    <div class="building building-left">
+      <!-- 左前遠：上方花店 -->
+      <div class="block block-far">
+        <div class="block-inner">
+          <div class="shop-label">左前遠</div>
+          <div class="shop-name" id="leftFar">—</div>
+        </div>
+      </div>
+      <!-- 左前近：下方食店 -->
+      <div class="block block-near">
+        <div class="block-inner">
+          <div class="shop-label">左前近</div>
+          <div class="shop-name" id="leftNear">—</div>
+        </div>
+      </div>
+    </div>
 
-            <!-- 右前遠 -->
-            <div class="shop-card card-right-far">
-              <div class="shop-label">右前遠</div>
-              <div class="shop-name" id="rightFar">—</div>
-            </div>
+    <!-- 右側轉角樓 -->
+    <div class="building building-right">
+      <!-- 右前遠：上方花店 -->
+      <div class="block block-far">
+        <div class="block-inner">
+          <div class="shop-label">右前遠</div>
+          <div class="shop-name" id="rightFar">—</div>
+        </div>
+      </div>
+      <!-- 右前近：下方食店 -->
+      <div class="block block-near">
+        <div class="block-inner">
+          <div class="shop-label">右前近</div>
+          <div class="shop-name" id="rightNear">—</div>
+        </div>
+      </div>
+    </div>
 
-            <!-- 左前近 -->
-            <div class="shop-card card-left-near">
-              <div class="shop-label">左前近</div>
-              <div class="shop-name" id="leftNear">—</div>
-            </div>
+    <!-- 玩家所在路口 -->
+    <div class="you-are-here">
+      <div class="here-label">你在這個路口</div>
+      <div class="here-name" id="hereShop">交叉路口</div>
+    </div>
+  </div>
+</section>
 
-            <!-- 右前近 -->
-            <div class="shop-card card-right-near">
-              <div class="shop-label">右前近</div>
-              <div class="shop-name" id="rightNear">—</div>
-            </div>
-
-            <!-- 你所在的路口（沒有店舖名） -->
-            <div class="you-are-here">
-              <div class="here-label">你在這個路口</div>
-              <div class="here-name" id="hereShop">交叉路口</div>
-            </div>
-          </div>
-        </section>
 
         <!-- 下方：操作按鈕 -->
         <section class="controls-section">
