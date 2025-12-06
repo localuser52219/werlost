@@ -322,3 +322,11 @@ body {
     width: 46%;
   }
 }
+
+<head>
+  <meta charset="UTF-8" />
+  <title>迷路通信：玩家端</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <link rel="stylesheet" href="css/player.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
