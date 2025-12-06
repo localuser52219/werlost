@@ -1,14 +1,14 @@
 // js/viewer.js
-// 觀眾端：地圖 + 牆 + 玩家位置與面向 + 視野（前方左右 2×2），HUD 九宮格 + 建築群集區域標示
+// 觀眾端：地圖 + 牆 + 建築群集 + 玩家位置與面向 + 視野（前方左右 2×2），HUD 九宮格
 
 let room = null;
 let players = [];
 let pollTimer = null;
 let viewerStartTime = null;
 let mapGrid = null;
-let clusterAreas = []; // 每個元素：{ x0,y0,x1,y1,label }
+let clusterAreas = [];
 
-const CLUSTER_BLOCK = 5; // 必須與 shopName.js 內的 block 一致
+const CLUSTER_BLOCK = 5;
 
 document.addEventListener("DOMContentLoaded", () => {
   document
@@ -62,7 +62,6 @@ async function joinViewer() {
   const size = room.map_size || 25;
   mapGrid = window.generateMap(room.seed, size);
 
-  // 建築群集預先計算
   computeClusterAreas();
 
   await reloadPlayers();
@@ -89,7 +88,7 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 建築群集分類：根據店名內容大約判斷
+// 建築群集分類
 function classifyShopArea(shopName) {
   if (!shopName) return "商舖區";
   if (shopName.includes("玩具")) return "玩具區";
@@ -113,7 +112,7 @@ function classifyShopArea(shopName) {
   return "商舖區";
 }
 
-// 預先計算 clusterAreas
+// 建築群集預先計算
 function computeClusterAreas() {
   clusterAreas = [];
   if (!room || !mapGrid) return;
@@ -173,7 +172,7 @@ function computeClusterAreas() {
   }
 }
 
-// 畫地圖：牆 → 格線 → 群集區域 → 視野 → 玩家
+// 畫地圖：牆 → 格線 → 群集 → 視野 → 玩家
 function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
@@ -186,7 +185,6 @@ function drawMap() {
 
   ctx.clearRect(0, 0, cvs.width, cvs.height);
 
-  // 牆（cell-based）
   ctx.fillStyle = "#666";
   for (let y = 0; y < n; y++) {
     const row = mapGrid[y];
@@ -200,7 +198,6 @@ function drawMap() {
     }
   }
 
-  // 格線
   ctx.strokeStyle = "#aaa";
   for (let i = 0; i <= n; i++) {
     ctx.beginPath();
@@ -214,21 +211,18 @@ function drawMap() {
     ctx.stroke();
   }
 
-  // 建築群集半透明區域
   drawClusterAreas(ctx, n, cell);
 
-  // 視野（前方左右 2×2）
   players.forEach((p) => {
     drawPlayerFov(ctx, p, n, cell);
   });
 
-  // 玩家（交叉點）
   players.forEach((p) => {
     drawPlayerMarker(ctx, p, n, cell);
   });
 }
 
-// 群集區域繪圖
+// 群集區域
 function drawClusterAreas(ctx, n, cell) {
   if (!clusterAreas || !clusterAreas.length) return;
 
@@ -321,20 +315,21 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.restore();
 }
 
-// 玩家 marker + 面向箭嘴：以「格線交叉點」為中心
+// 玩家 marker：畫在所屬 cell 中心，避免視覺偏移
 function drawPlayerMarker(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const px = pos.x;
   const py = pos.y;
 
-  if (px < 0 || px > n || py < 0 || py > n) return;
+  if (px < 0 || px >= n || py < 0 || py >= n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  const nodeX = px * cell;
-  const nodeY = py * cell;
+  // cell 中心
+  const nodeX = (px + 0.5) * cell;
+  const nodeY = (py + 0.5) * cell;
   const radius = cell * 0.3;
 
   ctx.fillStyle = color;
@@ -362,7 +357,7 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.stroke();
 }
 
-// HUD：時間 + 以玩家為中心九宮格方位
+// HUD：時間 + 九宮格
 function updateHud() {
   updateGameTime();
   updatePlayerInfo();
@@ -419,7 +414,7 @@ function updatePlayerInfo() {
     const ne = getNameOrMark(cx + 1, cy - 1);
 
     const w = getNameOrMark(cx - 1, cy);
-    const c = window.getShopName(seed, cx, cy);
+    const c = "交叉路口";
     const e = getNameOrMark(cx + 1, cy);
 
     const sw = getNameOrMark(cx - 1, cy + 1);
