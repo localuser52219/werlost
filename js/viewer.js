@@ -30,6 +30,24 @@ function getPlayerPos(p) {
   return { x: px, y: py };
 }
 
+// 旋轉相對座標（與 player.js 相同）
+function rotateOffset(dx, dy, dir) {
+  let rx = dx;
+  let ry = dy;
+
+  if (dir === 1) {
+    rx = dy;
+    ry = -dx;
+  } else if (dir === 2) {
+    rx = -dx;
+    ry = -dy;
+  } else if (dir === 3) {
+    rx = -dy;
+    ry = dx;
+  }
+  return { dx: rx, dy: ry };
+}
+
 async function joinViewer() {
   const code = document.getElementById("roomCode").value.trim();
   const s = document.getElementById("status");
@@ -88,7 +106,7 @@ async function reloadPlayers() {
   players = ps || [];
 }
 
-// 建築群集分類
+// ===== 建築群集計算（保持你之前的邏輯） =====
 function classifyShopArea(shopName) {
   if (!shopName) return "商舖區";
   if (shopName.includes("玩具")) return "玩具區";
@@ -112,7 +130,6 @@ function classifyShopArea(shopName) {
   return "商舖區";
 }
 
-// 建築群集預先計算
 function computeClusterAreas() {
   clusterAreas = [];
   if (!room || !mapGrid) return;
@@ -172,7 +189,7 @@ function computeClusterAreas() {
   }
 }
 
-// 畫地圖：牆 → 格線 → 群集 → 視野 → 玩家
+// ===== 畫地圖 =====
 function drawMap() {
   if (!room || !mapGrid) return;
   const cvs = document.getElementById("mapCanvas");
@@ -222,7 +239,6 @@ function drawMap() {
   });
 }
 
-// 群集區域
 function drawClusterAreas(ctx, n, cell) {
   if (!clusterAreas || !clusterAreas.length) return;
 
@@ -259,7 +275,7 @@ function drawClusterAreas(ctx, n, cell) {
   ctx.restore();
 }
 
-// 視野：前方左右 2×2，與玩家端一致
+// 視野：前方左右 2×2，與 player.js 使用同一組旋轉 offset
 function drawPlayerFov(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const x0 = pos.x;
@@ -267,36 +283,24 @@ function drawPlayerFov(ctx, p, n, cell) {
 
   if (x0 < 0 || x0 >= n || y0 < 0 || y0 >= n) return;
 
-  const dirVec = [
-    { dx: 0, dy: -1 }, // 北
-    { dx: 1, dy: 0 },  // 東
-    { dx: 0, dy: 1 },  // 南
-    { dx: -1, dy: 0 }  // 西
-  ];
-
   const d = p.direction;
-  const forward = dirVec[d] || dirVec[0];
-  const left = dirVec[(d + 3) % 4] || dirVec[3];
 
-  const front1 = { x: x0 + forward.dx, y: y0 + forward.dy };
-  const front2 = { x: x0 + 2 * forward.dx, y: y0 + 2 * forward.dy };
+  const baseOffsets = {
+    leftNear:  { dx: -1, dy: -1 },
+    rightNear: { dx:  0, dy: -1 },
+    leftFar:   { dx: -1, dy: -2 },
+    rightFar:  { dx:  0, dy: -2 }
+  };
 
-  const leftNear = {
-    x: front1.x + left.dx,
-    y: front1.y + left.dy
-  };
-  const rightNear = {
-    x: front1.x,
-    y: front1.y
-  };
-  const leftFar = {
-    x: front2.x + left.dx,
-    y: front2.y + left.dy
-  };
-  const rightFar = {
-    x: front2.x,
-    y: front2.y
-  };
+  const lnOff = rotateOffset(baseOffsets.leftNear.dx, baseOffsets.leftNear.dy, d);
+  const rnOff = rotateOffset(baseOffsets.rightNear.dx, baseOffsets.rightNear.dy, d);
+  const lfOff = rotateOffset(baseOffsets.leftFar.dx, baseOffsets.leftFar.dy, d);
+  const rfOff = rotateOffset(baseOffsets.rightFar.dx, baseOffsets.rightFar.dy, d);
+
+  const leftNear  = { x: x0 + lnOff.dx, y: y0 + lnOff.dy };
+  const rightNear = { x: x0 + rnOff.dx, y: y0 + rnOff.dy };
+  const leftFar   = { x: x0 + lfOff.dx, y: y0 + lfOff.dy };
+  const rightFar  = { x: x0 + rfOff.dx, y: y0 + rfOff.dy };
 
   const cells = [leftNear, rightNear, leftFar, rightFar];
 
@@ -315,20 +319,18 @@ function drawPlayerFov(ctx, p, n, cell) {
   ctx.restore();
 }
 
-// 玩家 marker：畫在「交叉點」上，與前方 2×2 視野對應
+// 玩家 marker：畫在交叉點上
 function drawPlayerMarker(ctx, p, n, cell) {
   const pos = getPlayerPos(p);
   const px = pos.x;
   const py = pos.y;
 
-  // 交叉點座標（用交叉點索引 0..n-1）
   if (px < 0 || px >= n || py < 0 || py >= n) return;
 
   let color = "gray";
   if (p.role === "A") color = "red";
   else if (p.role === "B") color = "blue";
 
-  // 交叉點在格線交叉位置，不在格子中心
   const nodeX = px * cell;
   const nodeY = py * cell;
   const radius = cell * 0.3;
@@ -339,10 +341,10 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.fill();
 
   const dirVec = [
-    { dx: 0, dy: -1 }, // 北
-    { dx: 1, dy: 0 },  // 東
-    { dx: 0, dy: 1 },  // 南
-    { dx: -1, dy: 0 }  // 西
+    { dx: 0, dy: -1 },
+    { dx: 1, dy: 0 },
+    { dx: 0, dy: 1 },
+    { dx: -1, dy: 0 }
   ];
   const forward = dirVec[p.direction] || dirVec[0];
 
@@ -358,7 +360,8 @@ function drawPlayerMarker(ctx, p, n, cell) {
   ctx.stroke();
 }
 
-// HUD：時間 + 九宮格
+// ===== HUD & Realtime（沿用你現有版本，只略作補上「中心：交叉路口」） =====
+
 function updateHud() {
   updateGameTime();
   updatePlayerInfo();
@@ -435,7 +438,6 @@ function updatePlayerInfo() {
   infoEl.innerHTML = html;
 }
 
-// Realtime
 function setupRealtimeViewer() {
   if (!room) return;
 
