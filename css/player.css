@@ -21,17 +21,61 @@
   clip-path:polygon(20% 0,70% 0,100% 100%,0 100%);  /* 右側鏡像 */
 }
 /* 屋頂：沿同一條斜線延伸出來的薄層 */
-.block-inner::before{
-  content:"";position:absolute;left:-10%;right:-10%;top:-45%;height:60%;
-  background:linear-gradient(135deg,rgba(148,163,184,.95),rgba(55,65,81,.9));
+/* ========== 立體方塊本體（店名為矩形） ========== */
+.block-inner{
+  position:absolute;
+  inset:0;
+  padding:6px 8px;
+  border-radius:8px;
+  background:rgba(15,23,42,.96);
+  border:1px solid rgba(148,163,184,.9);
+  box-shadow:0 10px 18px rgba(0,0,0,.9);
+  display:flex;
+  flex-direction:column;
+  justify-content:center;
+  overflow:hidden;   /* 防止文字出界 */
+}
+
+/* 左右各自有一片「牆」用來做透視，不裁剪招牌本體 */
+.block{
+  position:absolute;
+}
+.block::before{
+  content:"";
+  position:absolute;
+  inset:auto;
+  left:-40%;
+  right:-40%;
+  bottom:-55%;
+  height:120%;
+  background:linear-gradient(135deg,rgba(15,23,42,.9),rgba(3,7,18,1));
   opacity:.9;
+  z-index:-1;
 }
-.building-left .block-inner::before{
-  clip-path:polygon(0 100%,100% 100%,80% 0,30% 0);
+.building-left .block::before{
+  clip-path:polygon(0 100%,100% 100%,75% 0,25% 0);  /* 左側牆，向中心收斂 */
 }
-.building-right .block-inner::before{
-  clip-path:polygon(20% 0,70% 0,100% 100%,0 100%);
+.building-right .block::before{
+  clip-path:polygon(25% 0,75% 0,100% 100%,0 100%);  /* 右側牆，鏡像 */
 }
+
+/* 屋頂：單獨一層，沿同一條斜線向消失點收斂 */
+.block::after{
+  content:"";
+  position:absolute;
+  left:-30%;
+  right:-30%;
+  top:-45%;
+  height:55%;
+  background:linear-gradient(
+    135deg,
+    rgba(148,163,184,.95),
+    rgba(55,65,81,.9)
+  );
+  opacity:.9;
+  z-index:-1;
+}
+
 /* 店名避免出界 */
 .shop-name{
   margin-top:2px;font-size:14px;font-weight:600;color:#f9fafb;
