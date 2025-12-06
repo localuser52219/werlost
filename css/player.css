@@ -1,4 +1,4 @@
-/* player.css：依手繪圖重構的立體視角 */
+/* player.css：依手繪圖重構的透視視角 */
 
 /* ========== 全局 ========== */
 *,
@@ -132,7 +132,7 @@ body {
   color: rgba(255, 255, 255, 0.9);
 }
 
-/* ========== 路口透視 ========== */
+/* ========== 路口透視區 ========== */
 
 .intersection {
   position: relative;
@@ -143,103 +143,117 @@ body {
   background: radial-gradient(circle at 40% 15%, #1f2937 0, #020617 55%, #000 100%);
   box-shadow: 0 20px 40px rgba(15, 23, 42, 0.9);
   overflow: hidden;
-  perspective: 1000px;
 }
 
-/* 中央道路：兩側收窄的透視梯形 */
+/* 中央道路：兩側收窄的梯形，消失點在上方中央 */
 .street-floor {
   position: absolute;
-  inset: 40% 0 0;
+  inset: 42% 0 0;
   background: radial-gradient(circle at 50% 100%, #111827 0, #020617 60%);
-  clip-path: polygon(14% 100%, 86% 100%, 62% 40%, 38% 40%);
+  clip-path: polygon(14% 100%, 86% 100%, 60% 40%, 40% 40%);
 }
 
-/* ========== 左右轉角樓 ========== */
+/* ========== 左右轉角樓容器（只負責定位，不再用 flex） ========== */
 
 .building {
   position: absolute;
-  top: 6%;
-  bottom: 16%;
-  width: 40%;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-end;
+  inset: 0;
   pointer-events: none;
 }
 
-.building-left {
-  left: 0;
-  align-items: flex-end;
+/* ========== 四個視野方塊的平面位置（靠近中央的遠方較小） ========== */
+
+/* 左前遠：接近中央、較小、較高 */
+.building-left .block-far {
+  position: absolute;
+  top: 20%;
+  left: 34%;
+  width: 22%;
+  height: 20%;
 }
 
-.building-right {
-  right: 0;
-  align-items: flex-start;
-}
-
-/* 每幢樓分兩層：遠（花店）在上，近（食店）在下 */
-
-.block {
-  position: relative;
-  width: 80%;
-  margin-bottom: 8%;
-}
-
-.block-far {
+/* 左前近：靠外邊、較大、較低 */
+.building-left .block-near {
+  position: absolute;
+  top: 48%;
+  left: 10%;
+  width: 32%;
   height: 26%;
 }
 
-.block-near {
-  height: 32%;
+/* 右前遠：接近中央、較小、較高 */
+.building-right .block-far {
+  position: absolute;
+  top: 20%;
+  right: 34%;
+  width: 22%;
+  height: 20%;
 }
 
-/* 立體牆面本體 */
+/* 右前近：靠外邊、較大、較低 */
+.building-right .block-near {
+  position: absolute;
+  top: 48%;
+  right: 10%;
+  width: 32%;
+  height: 26%;
+}
+
+/* ========== 立體方塊本體 ========== */
+
 .block-inner {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  top: 0;
+  inset: 0;
   padding: 6px 8px;
   border-radius: 8px;
-  background: linear-gradient(135deg, #1f2937, #020617);
+  background: linear-gradient(135deg, #111827, #020617);
   border: 1px solid rgba(148, 163, 184, 0.9);
-  box-shadow: 0 12px 18px rgba(0, 0, 0, 0.9);
+  box-shadow: 0 12px 20px rgba(0, 0, 0, 0.95);
   display: flex;
   flex-direction: column;
   justify-content: center;
-  transform-origin: bottom;
   overflow: hidden;
+  transform-origin: bottom center;
 }
 
-/* 左右兩邊用不同方向的傾斜模擬透視 */
+/* 左右各自向消失點收斂：使用 rotateY 形成透視 */
 .building-left .block-inner {
-  transform: skewY(-16deg);
+  transform: perspective(900px) rotateY(18deg);
 }
 
 .building-right .block-inner {
-  transform: skewY(16deg);
+  transform: perspective(900px) rotateY(-18deg);
 }
 
-/* 上方延伸屋頂，對應你畫的「T 字形」水平面 */
+/* 遠方方塊再縮小一點，增加遠近感 */
+.building-left .block-far .block-inner,
+.building-right .block-far .block-inner {
+  transform: perspective(900px) rotateY(18deg) scale(0.9);
+}
+
+.building-right .block-far .block-inner {
+  transform: perspective(900px) rotateY(-18deg) scale(0.9);
+}
+
+/* 屋頂：向中央的平行線，對應手繪圖的上方陰影面 */
 .block-inner::before {
   content: "";
   position: absolute;
-  left: 0;
-  right: 0;
-  top: -30%;
-  height: 40%;
+  left: -10%;
+  right: -10%;
+  top: -35%;
+  height: 45%;
   background: linear-gradient(
     135deg,
-    rgba(148, 163, 184, 0.9),
-    rgba(55, 65, 81, 0.95)
+    rgba(148, 163, 184, 0.95),
+    rgba(55, 65, 81, 0.9)
   );
-  transform-origin: bottom;
-  transform: skewY(12deg);
+  transform-origin: bottom center;
+  transform: skewX(12deg);
   opacity: 0.9;
 }
 
-/* ========== 店舖文字，避免溢出 ========== */
+/* ========== 店舖文字（不溢出） ========== */
 
 .shop-label {
   font-size: 11px;
@@ -254,19 +268,20 @@ body {
   color: #f9fafb;
   line-height: 1.25;
   word-break: break-all;
-  max-height: 2.6em;              /* 約 2 行 */
+  max-height: 2.6em;          /* 兩行高度 */
   overflow: hidden;
   display: -webkit-box;
-  -webkit-line-clamp: 2;          /* 限制為兩行 */
+  -webkit-line-clamp: 2;      /* 限制兩行 */
   -webkit-box-orient: vertical;
 }
 
-/* 遠處的樓層字稍小，看起來更遠 */
-.block-far .shop-name {
+/* 遠方方塊字再細一級 */
+.building-left .block-far .shop-name,
+.building-right .block-far .shop-name {
   font-size: 12px;
 }
 
-/* ========== 玩家所在路口（畫面最下方中央） ========== */
+/* ========== 玩家所在路口（下方中央） ========== */
 
 .you-are-here {
   position: absolute;
@@ -328,7 +343,13 @@ body {
     width: min(92vw, 460px);
   }
 
-  .block {
-    width: 88%;
+  .building-left .block-near,
+  .building-right .block-near {
+    width: 36%;
+  }
+
+  .building-left .block-far,
+  .building-right .block-far {
+    width: 24%;
   }
 }
