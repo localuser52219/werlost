@@ -110,9 +110,9 @@ border-color:rgba(99,102,241,.9);color:#fff}
 .building-left .block-near .block-inner,
 .building-left .block-far  .block-inner {
   clip-path: polygon(
-    0% 20%,   /* 左上：比右上低 → 向外下垂 */
-    50% 0%,  /* 右上 */
-    50% 80%, /* 右下 */
+    0% 15%,   /* 左上：比右上低 → 向外下垂 */
+    100% 0%,  /* 右上 */
+    100% 80%, /* 右下 */
     0% 100%   /* 左下 */
   );
 }
@@ -122,7 +122,7 @@ border-color:rgba(99,102,241,.9);color:#fff}
 .building-right .block-far  .block-inner {
   clip-path: polygon(
     0% 0%,    /* 左上 */
-    100% 20%, /* 右上：比左上低 → 向外下垂 */
+    100% 15%, /* 右上：比左上低 → 向外下垂 */
     100% 100%,/* 右下 */
     0% 80%    /* 左下 */
   );
