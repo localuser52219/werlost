@@ -1,86 +1,109 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
-<head>
-<meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>迷路城市｜玩家端</title>
-<style>
-body{font-family:sans-serif;padding:16px;margin:0;background:#f5f5f5;}
-h1{margin:0 0 10px;font-size:22px;}
-.box{border:1px solid #ccc;background:#fff;padding:10px;margin-top:10px;box-sizing:border-box;}
-label{font-size:14px;margin-right:8px;}
-input,select{padding:4px 6px;font-size:14px;}
-button{margin:4px 4px 0 0;padding:6px 14px;font-size:14px;cursor:pointer;}
-#status{font-size:13px;color:#555;margin-top:4px;}
-.view-title{margin:4px 0 8px;font-size:16px;}
-.view-grid{display:grid;grid-template-columns:1fr 1fr 1fr;grid-auto-rows:80px;gap:6px;max-width:420px;margin:0 auto;}
-.cell{border:1px solid #ddd;border-radius:8px;padding:4px 6px;box-sizing:border-box;background:#fafafa;display:flex;flex-direction:column;justify-content:space-between;}
-.dir-label{font-size:11px;color:#666;}
-.shop{font-size:13px;font-weight:bold;word-break:break-all;}
-.center{background:#e9f4ff;border-color:#8bbcff;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-.you{font-size:14px;font-weight:bold;margin-bottom:2px;}
-.empty{border:none;background:transparent;}
-.ops{display:flex;justify-content:center;gap:8px;margin-top:4px;}
-@media(min-width:768px){.view-grid{max-width:520px;}}
-</style>
-</head>
-<body>
-<h1>迷路城市｜玩家端</h1>
+<html lang="zh-Hant">
+  <head>
+    <meta charset="UTF-8" />
+    <title>迷路通信：玩家端</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- 玩家端專用樣式 -->
+    <link rel="stylesheet" href="css/player.css" />
+  </head>
+  <body>
+    <div class="player-page">
+      <!-- 上方：房間／角色／狀態 -->
+      <header class="top-bar">
+        <div class="top-bar-left">
+          <h1 class="app-title">迷路通信 · 玩家端</h1>
+          <p class="app-subtitle">你只看得到路口前方的街景</p>
+        </div>
+        <div class="top-bar-right">
+          <label class="field">
+            <span class="field-label">房間代碼</span>
+            <input
+              id="roomCode"
+              type="text"
+              placeholder="例如：AB12"
+              class="input"
+            />
+          </label>
+          <label class="field">
+            <span class="field-label">角色</span>
+            <select id="role" class="input">
+              <option value="A">玩家 A</option>
+              <option value="B">玩家 B</option>
+            </select>
+          </label>
+          <button id="joinBtn" class="btn primary">加入房間</button>
+          <div id="status" class="status-text">尚未連線</div>
+        </div>
+      </header>
 
-<div class="box">
-  <label>房間代碼：<input id="roomCode"/></label>
-  <label>角色：
-    <select id="role">
-      <option value="A">A</option>
-      <option value="B">B</option>
-    </select>
-  </label>
-  <button id="joinBtn">加入房間</button>
-  <div id="status"></div>
-</div>
+      <main class="content">
+        <!-- 中間：路口視角 -->
+        <section class="view-section">
+          <h2 class="section-title">目前街口視野</h2>
+          <div class="intersection">
+            <!-- 垂直馬路 -->
+            <div class="road road-vertical"></div>
+            <!-- 水平馬路 -->
+            <div class="road road-horizontal"></div>
 
-<div class="box">
-  <div class="view-title">視野（以你面向為「上方」，前方左右 2×2 街區）</div>
-  <div class="view-grid">
-    <div class="cell">
-      <div class="dir-label">左前第 2 格</div>
-      <div id="leftFar" class="shop"></div>
-    </div>
-    <div class="cell empty"></div>
-    <div class="cell">
-      <div class="dir-label">右前第 2 格</div>
-      <div id="rightFar" class="shop"></div>
-    </div>
-    <div class="cell">
-      <div class="dir-label">左前</div>
-      <div id="leftNear" class="shop"></div>
-    </div>
-    <div class="cell empty"></div>
-    <div class="cell">
-      <div class="dir-label">右前</div>
-      <div id="rightNear" class="shop"></div>
-    </div>
-    <div class="cell empty"></div>
-    <div class="cell center">
-      <div class="you">你在這裡（面向↑）</div>
-      <div id="hereShop" class="shop"></div>
-    </div>
-    <div class="cell empty"></div>
-  </div>
-</div>
+            <!-- 左前遠 -->
+            <div class="shop-card card-left-far">
+              <div class="shop-label">左前遠</div>
+              <div class="shop-name" id="leftFar">—</div>
+            </div>
 
-<div class="box">
-  <h2 style="margin:0 0 6px;font-size:16px;">操作</h2>
-  <div class="ops">
-    <button id="turnLeft">左轉</button>
-    <button id="moveForward">向前</button>
-    <button id="turnRight">右轉</button>
-  </div>
-</div>
+            <!-- 右前遠 -->
+            <div class="shop-card card-right-far">
+              <div class="shop-label">右前遠</div>
+              <div class="shop-name" id="rightFar">—</div>
+            </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="js/supabaseClient.js"></script>
-<script src="js/shopName.js"></script>
-<script src="js/player.js"></script>
-</body>
+            <!-- 左前近 -->
+            <div class="shop-card card-left-near">
+              <div class="shop-label">左前近</div>
+              <div class="shop-name" id="leftNear">—</div>
+            </div>
+
+            <!-- 右前近 -->
+            <div class="shop-card card-right-near">
+              <div class="shop-label">右前近</div>
+              <div class="shop-name" id="rightNear">—</div>
+            </div>
+
+            <!-- 你所在的路口（沒有店舖名） -->
+            <div class="you-are-here">
+              <div class="here-label">你在這個路口</div>
+              <div class="here-name" id="hereShop">交叉路口</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- 下方：操作按鈕 -->
+        <section class="controls-section">
+          <h2 class="section-title">行動</h2>
+          <div class="controls-row">
+            <button id="turnLeft" class="btn">
+              ⟲ 左轉
+            </button>
+            <button id="moveForward" class="btn primary">
+              ↑ 向前走
+            </button>
+            <button id="turnRight" class="btn">
+              右轉 ⟳
+            </button>
+          </div>
+          <p class="hint-text">
+            規則提示：你只看得到眼前四個街角和自己所在的路口。<br />
+            請用語音或電話形容店舖名稱和相對位置，嘗試與對方會合。
+          </p>
+        </section>
+      </main>
+    </div>
+
+    <!-- JS：順序不能改，先 Supabase，再 shopName，再 player -->
+    <script src="js/supabaseClient.js"></script>
+    <script src="js/shopName.js"></script>
+    <script src="js/player.js"></script>
+  </body>
 </html>
