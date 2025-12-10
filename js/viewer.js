@@ -6,8 +6,8 @@ let roomData = null;
 let mapSize = 0;
 let mapGrid = null;
 
-let initialA = null;   // A 玩家起始位置（只記一次，ix,iy，若無則 x,y）
-let goal = null;       // 固定目的地：A 起始位置的東北格
+let initialA = null;   // A 玩家起始「交叉點」位置（ix,iy）
+let goal = null;       // 固定目的地：A 起始交叉點的東北格
 
 let players = [];      // 最新玩家資料列表
 
@@ -50,7 +50,6 @@ function getRoomCodeFromUrl() {
 async function initViewer(code) {
   const statusEl = document.getElementById("viewerStatus");
 
-  // 讀取房間資料
   const { data: room, error: roomErr } = await window._supabase
     .from("rooms")
     .select("*")
@@ -67,7 +66,6 @@ async function initViewer(code) {
   mapSize = room.map_size;
   mapGrid = window.generateMap(room.seed, mapSize);
 
-  // 繪製基本地圖
   drawBaseMap();
 
   if (statusEl) statusEl.textContent = "等待玩家資料…";
@@ -132,13 +130,13 @@ function handlePlayersUpdate() {
 
   if (statusEl) statusEl.textContent = "遊戲進行中…";
 
-  // A 的初始位置：只記錄一次
+  // A 的初始「交叉點」位置：只記一次
   if (pA && !initialA) {
     const ix = (typeof pA.ix === "number") ? pA.ix : pA.x;
     const iy = (typeof pA.iy === "number") ? pA.iy : pA.y;
     initialA = { x: ix, y: iy };
 
-    // 計算固定目的地：A 起始位置的東北格
+    // 計算固定目的地：A 起始交叉點的東北格 (ix,iy-1)
     goal = computeGoalFromA(initialA);
   }
 
@@ -167,19 +165,13 @@ function drawBaseMap() {
   const ctx = canvas.getContext("2d");
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // 背景
   ctx.fillStyle = "#020617";
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // 格子：道路 / 牆
   for (let y = 0; y < size; y++) {
     for (let x = 0; x < size; x++) {
       const isWall = window.isWall(mapGrid, x, y);
-      if (isWall) {
-        ctx.fillStyle = "#111827";
-      } else {
-        ctx.fillStyle = "#0b1120";
-      }
+      ctx.fillStyle = isWall ? "#111827" : "#0b1120";
       ctx.fillRect(
         x * CELL_SIZE,
         y * CELL_SIZE,
@@ -194,7 +186,7 @@ function clearPlayersOnMap() {
   drawBaseMap();
 }
 
-// 將玩家畫成圓點（A=藍、B=紅）
+// 玩家圓點：目前仍以格子中心畫（用 x,y），如果要改到交叉點再說
 function drawPlayersOnMap() {
   const canvas = getMapCanvas();
   if (!canvas || !mapGrid) return;
@@ -216,12 +208,15 @@ function drawPlayerDot(ctx, gridX, gridY, color) {
   ctx.fill();
 }
 
-// ========== 目的地（A 起始東北格） + 大星星 ICON ==========
+// ========== 目的地（A 起始交叉點的東北格） + 星星 ICON ==========
 
+// startA 為交叉點 (ix,iy)
+// 東北格 = (ix, iy-1)
 function computeGoalFromA(startA) {
   if (!mapGrid || !startA) return null;
-  const gx = startA.x + 1;  // 東：x+1
-  const gy = startA.y - 1;  // 北：y-1（畫面往下為正）
+
+  const gx = startA.x;     // NE 格子 x = ix
+  const gy = startA.y - 1; // NE 格子 y = iy-1
 
   if (gx < 0 || gx >= mapSize || gy < 0 || gy >= mapSize) return null;
 
@@ -235,8 +230,6 @@ function drawGoalOnMap() {
   if (!canvas || !goal) return;
 
   const wrapper = canvas.parentElement || document.body;
-
-  // 先移除舊的
   clearGoalStar();
 
   const star = document.createElement("div");
@@ -246,7 +239,6 @@ function drawGoalOnMap() {
   const px = goal.x * CELL_SIZE + CELL_SIZE / 2;
   const py = goal.y * CELL_SIZE + CELL_SIZE / 2;
 
-  // wrapper 須是相對定位（在 CSS 設定 .map-wrapper { position: relative; }）
   star.style.left = px + "px";
   star.style.top = py + "px";
 
@@ -258,28 +250,32 @@ function clearGoalStar() {
   if (old && old.parentNode) old.parentNode.removeChild(old);
 }
 
-// ========== 遊戲資訊：NE/SE/NW/SW + 目的地文字 ==========
+// ========== 遊戲資訊：NE/SE/NW/SW（以交叉點為中心） + 目的地文字 ==========
 
 function updateGameInfo(pA, pB) {
   const infoAEl = document.getElementById("infoAQuads");
   const infoBEl = document.getElementById("infoBQuads");
   const goalEl = document.getElementById("goalInfo");
 
-  // 玩家 A 周邊
+  // 玩家 A 周邊：用 A 的交叉點座標 (ix,iy) 計算四周格
   if (infoAEl && pA) {
-    infoAEl.innerHTML = buildQuadInfoHtml(pA.x, pA.y);
+    const ixA = (typeof pA.ix === "number") ? pA.ix : pA.x;
+    const iyA = (typeof pA.iy === "number") ? pA.iy : pA.y;
+    infoAEl.innerHTML = buildQuadInfoHtml(ixA, iyA);
   } else if (infoAEl) {
     infoAEl.innerHTML = "<div>玩家 A 未加入</div>";
   }
 
-  // 玩家 B 周邊
+  // 玩家 B 周邊：同樣以交叉點處理（若無 ix,iy 則退回 x,y）
   if (infoBEl && pB) {
-    infoBEl.innerHTML = buildQuadInfoHtml(pB.x, pB.y);
+    const ixB = (typeof pB.ix === "number") ? pB.ix : pB.x;
+    const iyB = (typeof pB.iy === "number") ? pB.iy : pB.y;
+    infoBEl.innerHTML = buildQuadInfoHtml(ixB, iyB);
   } else if (infoBEl) {
     infoBEl.innerHTML = "<div>玩家 B 未加入</div>";
   }
 
-  // 目的地：A 起始位置的東北格
+  // 目的地文字：A 起始交叉點的東北格
   if (goalEl) {
     if (goal) {
       goalEl.textContent = `目的地：${goal.name} (${goal.x}, ${goal.y})`;
@@ -289,12 +285,13 @@ function updateGameInfo(pA, pB) {
   }
 }
 
-// 建構 NE/SE/NW/SW 四格資訊（以玩家當前位置為中心）
-function buildQuadInfoHtml(px, py) {
-  const ne = getCellLabel(px + 1, py - 1);
-  const se = getCellLabel(px + 1, py + 1);
-  const nw = getCellLabel(px - 1, py - 1);
-  const sw = getCellLabel(px - 1, py + 1);
+// 以「交叉點 (ix,iy)」為中心，計算周圍四個格子
+// NW: (ix-1, iy-1), NE: (ix, iy-1), SW: (ix-1, iy), SE: (ix, iy)
+function buildQuadInfoHtml(ix, iy) {
+  const ne = getCellLabel(ix,     iy - 1);
+  const se = getCellLabel(ix,     iy);
+  const nw = getCellLabel(ix - 1, iy - 1);
+  const sw = getCellLabel(ix - 1, iy);
 
   return `
     <div>東北 (NE)：${ne}</div>
@@ -316,7 +313,6 @@ function getCellLabel(x, y) {
     return "牆壁";
   }
 
-  // 若有店舖函式就取店名
   if (typeof window.getShopName === "function") {
     try {
       return window.getShopName(mapGrid, x, y);
@@ -325,6 +321,5 @@ function getCellLabel(x, y) {
     }
   }
 
-  // Fallback：道路 + 座標
   return `(${x},${y}) 道路`;
 }
