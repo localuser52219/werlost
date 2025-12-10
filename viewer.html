@@ -1,162 +1,159 @@
 <!DOCTYPE html>
-<html lang="zh-HK">
+<html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8"/>
-  <meta name="viewport" content="width=device-width, initial-scale=1"/>
-  <title>迷路城市｜觀眾端</title>
+  <meta charset="UTF-8" />
+  <title>迷路追蹤器 觀眾端 Viewer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+  <!-- 外掛樣式檔：如果你已經有 css/viewer.css 就保留；沒有就可以先這樣寫 -->
+  <link rel="stylesheet" href="/css/viewer.css" />
+
   <style>
+    /* 可與 /css/viewer.css 合併使用；如果你已有樣式，這段只是安全預設 */
     body{
-      font-family:sans-serif;
-      padding:20px;
-      box-sizing:border-box;
       margin:0;
-      background:#f5f5f5;
+      padding:16px;
+      font-family:system-ui,-apple-system,"PingFang TC","Microsoft JhengHei",sans-serif;
+      background:#020617;
+      color:#e5e7eb;
     }
-    h1{
-      margin:0 0 10px 0;
-      font-size:24px;
+    .viewer-page{
+      max-width:1200px;
+      margin:0 auto;
     }
-    .box{
-      border:1px solid #ccc;
-      background:#fff;
-      padding:10px;
-      margin-top:10px;
-      box-sizing:border-box;
-    }
-    .top-bar{
-      display:flex;
-      align-items:center;
-      gap:8px;
-      flex-wrap:wrap;
-    }
-    .top-bar label{
-      display:flex;
-      align-items:center;
-      gap:4px;
-      font-size:14px;
-    }
-    .top-bar input{
-      padding:4px 6px;
-      font-size:14px;
-    }
-    .top-bar button{
-      padding:6px 12px;
-      font-size:14px;
-      cursor:pointer;
-    }
-    #status{
-      font-size:13px;
-      color:#555;
-      margin-top:6px;
-    }
-
-    /* 主要版面：地圖 + 資訊 兩欄 */
-    .main-layout{
-      display:flex;
-      flex-wrap:nowrap;
-      gap:12px;
-      margin-top:10px;
-    }
-    .panel-map{
-      flex:2 1 0;
-      min-width:0;
-    }
-    .panel-info{
-      flex:1 0 260px;
-      max-width:420px;
-      font-size:13px;
-      line-height:1.4;
-    }
-
-    canvas{
-      border:1px solid #666;
-      max-width:100%;
-      height:auto;
-      background:#fafafa;
-      display:block;
-    }
-
-    .hud-label{
-      font-weight:bold;
-      margin-right:6px;
-    }
-    #gameTime{
-      font-family:monospace;
-      font-size:16px;
-    }
-
-    .player-block{
-      margin-top:8px;
-      padding-top:6px;
-      border-top:1px dashed #ccc;
-    }
-    .player-block strong{
-      font-size:14px;
-    }
-    .player-line{
+    .viewer-header{
+      margin-bottom:12px;
       display:flex;
       justify-content:space-between;
-      gap:4px;
-      font-family:monospace;
-      white-space:nowrap;
+      align-items:flex-end;
+      gap:10px;
+      border-bottom:1px solid rgba(148,163,184,.5);
+      padding-bottom:8px;
     }
-    .player-line span{
-      flex:1 1 0;
+    .viewer-title{
+      margin:0;
+      font-size:22px;
+      letter-spacing:.12em;
+    }
+    .viewer-subtitle{
+      margin:4px 0 0;
+      font-size:13px;
+      color:rgba(148,163,184,.9);
+    }
+    #viewerStatus{
+      font-size:13px;
+      color:#38bdf8;
+      text-align:right;
+      min-width:180px;
+    }
+    .viewer-main{
+      margin-top:12px;
+      display:flex;
+      flex-direction:column;
+      gap:16px;
+    }
+    .game-info{
+      display:flex;
+      flex-wrap:wrap;
+      gap:16px;
+    }
+    .info-block{
+      flex:1 1 260px;
+      min-width:220px;
+      padding:10px 12px;
+      border-radius:10px;
+      background:rgba(15,23,42,.95);
+      border:1px solid rgba(51,65,85,.9);
+      box-shadow:0 8px 20px rgba(15,23,42,.9);
+      font-size:14px;
+    }
+    .info-block h3{
+      margin:0 0 6px;
+      font-size:15px;
+      letter-spacing:.08em;
+      color:#e5e7eb;
+    }
+    .info-block div{
+      margin:2px 0;
+    }
+    .goal-info{
+      margin-top:8px;
+      padding:6px 8px;
+      border-radius:8px;
+      border:1px solid #facc15;
+      color:#facc15;
+      font-weight:600;
+      background:rgba(0,0,0,.4);
+      font-size:14px;
+    }
+    .map-wrapper{
+      padding:10px;
+      border-radius:12px;
+      background:radial-gradient(circle at top,#020617,#000);
+      border:1px solid rgba(30,64,175,.8);
+      box-shadow:0 12px 30px rgba(15,23,42,.95);
+      overflow:auto;
+    }
+    #viewerMap{
+      display:block;
+      background:#020617;
     }
 
-    /* 大螢幕優化：文字不要太擠 */
-    @media (min-width:1200px){
-      body{
-        padding:24px 40px;
-      }
-      h1{
-        font-size:28px;
-      }
-      .panel-info{
-        max-width:500px;
-      }
+    @media (max-width:768px){
+      body{padding:10px;}
+      .viewer-header{flex-direction:column;align-items:flex-start;}
+      #viewerStatus{text-align:left;}
     }
   </style>
 </head>
 <body>
-  <h1>迷路城市｜觀眾端</h1>
-
-  <!-- 上方：房間載入欄 -->
-  <div class="box">
-    <div class="top-bar">
-      <label>
-        房間代碼：
-        <input id="roomCode"/>
-      </label>
-      <button id="joinViewer">載入房間</button>
-    </div>
-    <div id="status"></div>
-  </div>
-
-  <!-- 下方：左右兩欄 -->
-  <div class="main-layout">
-
-    <!-- 左：地圖 -->
-    <div class="panel-map box">
-      <h2>地圖</h2>
-      <canvas id="mapCanvas"></canvas>
-    </div>
-
-    <!-- 右：遊戲資訊 -->
-    <div class="panel-info box">
-      <h2>遊戲資訊</h2>
+  <div class="viewer-page">
+    <header class="viewer-header">
       <div>
-        <span class="hud-label">遊戲時間：</span>
-        <span id="gameTime">00:00:00</span>
+        <h1 class="viewer-title">迷路追蹤器 · 觀眾端</h1>
+        <p class="viewer-subtitle">顯示兩位玩家在城市中的位置與方位資訊</p>
       </div>
-      <div id="playerInfo"></div>
-    </div>
+      <div id="viewerStatus">載入中…</div>
+    </header>
 
+    <main class="viewer-main">
+      <!-- 遊戲資訊區：玩家 A / B 四周 + 目的地 -->
+      <section class="game-info">
+        <div class="info-block">
+          <h3>玩家 A 周邊</h3>
+          <div id="infoAQuads">尚未有玩家資料</div>
+
+          <!-- 目的地資訊：A 起始位置的東北格（固定，不隨 A 移動） -->
+          <div id="goalInfo" class="goal-info">目的地：尚未設定</div>
+        </div>
+
+        <div class="info-block">
+          <h3>玩家 B 周邊</h3>
+          <div id="infoBQuads">尚未有玩家資料</div>
+        </div>
+      </section>
+
+      <!-- 大地圖畫面：用 canvas 繪製 -->
+      <section class="map-section">
+        <div class="map-wrapper">
+          <!-- 注意：寬高會由 viewer.js 根據地圖尺寸自動設定 -->
+          <canvas id="viewerMap"></canvas>
+        </div>
+      </section>
+    </main>
   </div>
 
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabaseClient.js"></script>
-  <script src="js/shopName.js"></script>
-  <script src="js/viewer.js"></script>
+  <!-- Supabase JS（CDN 版本，若你已有就不要重複載入） -->
+  <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+
+  <!-- 你的 Supabase 客戶端初始化：負責設定 window._supabase -->
+  <!-- 確保這個檔案內已使用你提供的 URL & anon key -->
+  <script src="/js/supabaseClient.js"></script>
+
+  <!-- 店舖名與地圖生成：必須提供 generateMap / isWall / getShopName（如有） -->
+  <script src="/js/shopName.js"></script>
+
+  <!-- 觀眾端邏輯（前一訊息給你的新版 viewer.js） -->
+  <script src="/js/viewer.js"></script>
 </body>
 </html>
