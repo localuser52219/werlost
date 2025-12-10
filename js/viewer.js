@@ -19,7 +19,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const statusEl = document.getElementById("viewerStatus");
 
   if (!roomCode) {
-    if (statusEl) statusEl.textContent = "URL 缺少 ?code= 房間代碼";
+    if (statusEl) statusEl.textContent = "URL 缺少 ?room= 或 ?code= 房間代碼";
     return;
   }
   if (!window._supabase) {
@@ -39,10 +39,12 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 });
 
-// 從 URL 讀取 ?code=
+// 從 URL 讀取房間代碼：優先用 ?room=，其次用 ?code=
 function getRoomCodeFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  const code = params.get("code");
+  const fromRoom = params.get("room");
+  const fromCode = params.get("code");
+  const code = fromRoom || fromCode;
   return code ? code.trim() : null;
 }
 
@@ -53,12 +55,12 @@ async function initViewer(code) {
   const { data: room, error: roomErr } = await window._supabase
     .from("rooms")
     .select("*")
-    .eq("code", code)
+    .eq("code", code)              // DB 裡欄位叫 code，沿用
     .maybeSingle();
 
   if (roomErr || !room) {
     console.error(roomErr);
-    if (statusEl) statusEl.textContent = "找不到此房間";
+    if (statusEl) statusEl.textContent = "找不到此房間：" + code;
     return;
   }
 
@@ -136,11 +138,10 @@ function handlePlayersUpdate() {
     const iy = (typeof pA.iy === "number") ? pA.iy : pA.y;
     initialA = { x: ix, y: iy };
 
-    // 計算固定目的地：A 起始交叉點的東北格 (ix,iy-1)
+    // 計算固定目的地：A 起始交叉點的東北格
     goal = computeGoalFromA(initialA);
   }
 
-  // 重畫地圖 + 玩家 + 目的地
   drawBaseMap();
   drawPlayersOnMap();
   if (goal) drawGoalOnMap(); else clearGoalStar();
@@ -186,7 +187,7 @@ function clearPlayersOnMap() {
   drawBaseMap();
 }
 
-// 玩家圓點：目前仍以格子中心畫（用 x,y），如果要改到交叉點再說
+// 玩家圓點：目前仍以格子中心畫（用 x,y）
 function drawPlayersOnMap() {
   const canvas = getMapCanvas();
   if (!canvas || !mapGrid) return;
