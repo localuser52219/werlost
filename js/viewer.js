@@ -242,6 +242,26 @@ function drawGoalOnMap() {
   ctx.fill();
 
   ctx.restore();
+    const cvs = document.getElementById("viewerMap");
+  const wrapper = cvs.parentElement;
+
+  // 移除既有 star
+  const old = document.getElementById("goal-star");
+  if (old) old.remove();
+
+  // 新星星
+  const star = document.createElement("div");
+  star.id = "goal-star";
+  star.className = "goal-star";
+
+  // 對應格子中心位置
+  const px = goal.x * CELL_SIZE + CELL_SIZE / 2;
+  const py = goal.y * CELL_SIZE + CELL_SIZE / 2;
+
+  star.style.left = px + "px";
+  star.style.top = py + "px";
+
+  wrapper.appendChild(star);
 }
 
 // ========== 目的地計算：A 起始位置的東北格 ==========
