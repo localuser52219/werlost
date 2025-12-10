@@ -202,6 +202,41 @@ border-color:rgba(99,102,241,.9);color:#fff}
   color:rgba(210,220,235,.85);
 }
 
+/* ============================================================
+   目的地 ICON（大星星）
+   用於 viewer.html 地圖上顯示固定終點
+   ============================================================ */
+
+.goal-star {
+  position: absolute;
+  width: 40px;          /* 星星大小：可調 */
+  height: 40px;
+  transform: translate(-50%, -50%); /* 對準格子中心 */
+  pointer-events: none;
+  z-index: 50;
+
+  /* 星星本體（以 SVG path 填色） */
+  background: url('data:image/svg+xml;utf8,\
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">\
+      <polygon points="32,4 39,24 60,24 42,38 48,58 32,46 16,58 22,38 4,24 25,24" \
+        fill="%23facc15" stroke="%23fde047" stroke-width="4" />\
+    </svg>') no-repeat center center / contain;
+
+  /* 外部光暈 */
+  filter: drop-shadow(0 0 6px rgba(250, 204, 21, .9))
+          drop-shadow(0 0 12px rgba(250, 204, 21, .6));
+
+  animation: starPulse 1.6s ease-in-out infinite;
+}
+
+/* 大星星閃動動畫（呼吸式） */
+@keyframes starPulse {
+  0%   { transform: translate(-50%, -50%) scale(0.88); opacity: 0.85; }
+  50%  { transform: translate(-50%, -50%) scale(1.16); opacity: 1; }
+  100% { transform: translate(-50%, -50%) scale(0.88); opacity: 0.85; }
+}
+
+
 /* RWD ---------------------------------------------- */
 
 @media (max-width:768px){
