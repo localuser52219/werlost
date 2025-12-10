@@ -5,11 +5,9 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- 外掛樣式檔：如有 /css/viewer.css 可以保留；沒有可以之後再加 -->
   <link rel="stylesheet" href="/css/viewer.css" />
 
   <style>
-    /* 簡單基本樣式，避免完全素頁（之後可在 viewer.css 覆蓋） */
     body {
       margin: 0;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
@@ -81,17 +79,22 @@
       color: #ffd5d8;
       border: 1px solid rgba(255, 120, 120, 0.6);
       font-size: 0.9rem;
-      display: none; /* 由 JS 控制顯示 */
+      display: none; /* 由 JS 控制 */
     }
 
-    .grid {
+    .layout {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: minmax(0, 2fr) minmax(0, 1.3fr);
       gap: 16px;
-      margin-top: 8px;
     }
 
-    .card {
+    @media (max-width: 900px) {
+      .layout {
+        grid-template-columns: minmax(0, 1fr);
+      }
+    }
+
+    .panel {
       border-radius: 12px;
       padding: 14px 16px;
       background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), rgba(8, 12, 26, 0.95));
@@ -99,14 +102,14 @@
       box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
     }
 
-    .card-header {
+    .panel-header {
       display: flex;
       justify-content: space-between;
       align-items: baseline;
       margin-bottom: 8px;
     }
 
-    .card-title {
+    .panel-title {
       font-size: 0.95rem;
       font-weight: 600;
       letter-spacing: 0.04em;
@@ -114,15 +117,129 @@
       opacity: 0.95;
     }
 
-    .card-tag {
+    .panel-tag {
       font-size: 0.75rem;
       opacity: 0.8;
     }
 
-    .card-body {
-      font-size: 0.95rem;
+    .panel-body {
+      font-size: 0.9rem;
       line-height: 1.5;
-      min-height: 2.5em;
+    }
+
+    /* 地圖格子 */
+    .map-grid {
+      display: grid;
+      grid-template-columns: repeat(9, 1fr);
+      gap: 2px;
+      margin-top: 8px;
+      border-radius: 8px;
+      padding: 6px;
+      background: #050814;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .map-cell {
+      position: relative;
+      aspect-ratio: 1 / 1;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.04);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.75rem;
+    }
+
+    .map-cell-label {
+      z-index: 1;
+    }
+
+    .map-cell-coord {
+      position: absolute;
+      bottom: 2px;
+      right: 4px;
+      font-size: 0.55rem;
+      opacity: 0.5;
+    }
+
+    .map-cell--player-a {
+      background: rgba(80, 200, 255, 0.55);
+      font-weight: 600;
+    }
+
+    .map-cell--player-b {
+      background: rgba(255, 150, 70, 0.55);
+      font-weight: 600;
+    }
+
+    .map-cell--destination {
+      background: rgba(160, 255, 120, 0.65);
+      font-weight: 600;
+    }
+
+    .map-cell--shop {
+      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
+    }
+
+    .legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 8px;
+      font-size: 0.75rem;
+      opacity: 0.85;
+    }
+
+    .legend-item {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .legend-color {
+      width: 10px;
+      height: 10px;
+      border-radius: 3px;
+    }
+
+    .legend-player-a {
+      background: rgba(80, 200, 255, 0.8);
+    }
+
+    .legend-player-b {
+      background: rgba(255, 150, 70, 0.8);
+    }
+
+    .legend-destination {
+      background: rgba(160, 255, 120, 0.9);
+    }
+
+    .legend-shop {
+      background: transparent;
+      border-radius: 3px;
+      border: 2px solid rgba(255, 255, 255, 0.7);
+    }
+
+    .status-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 4px 0 0;
+      font-size: 0.85rem;
+    }
+
+    .status-list li {
+      margin-bottom: 2px;
+    }
+
+    .shops-list {
+      list-style: none;
+      padding-left: 0;
+      margin: 4px 0 0;
+      font-size: 0.85rem;
+    }
+
+    .shops-list li {
+      margin-bottom: 2px;
     }
 
     footer {
@@ -137,14 +254,14 @@
   <div class="viewer-wrapper">
     <header>
       <h1>迷路追蹤器 觀眾端 Viewer</h1>
-      <div class="subtitle">顯示玩家位置與目的地（只讀模式）</div>
+      <div class="subtitle">顯示玩家位置、附近店舖與終點（只讀投影畫面）</div>
     </header>
 
     <main>
-      <!-- 錯誤訊息區：由 viewer.js 控制內容與顯示/隱藏 -->
+      <!-- 錯誤訊息 -->
       <div id="viewer-error" class="error-bar"></div>
 
-      <!-- 主內容區：若沒有 room 參數，viewer.js 會隱藏這個區塊 -->
+      <!-- 主內容（無 room 時由 JS 隱藏） -->
       <section id="viewer-main">
         <!-- 房間資訊 -->
         <div class="info-row">
@@ -152,50 +269,57 @@
           <span class="room-code" id="room-code">---</span>
         </div>
 
-        <!-- 玩家與目的地卡片 -->
-        <div class="grid">
-          <!-- 玩家 A -->
-          <article class="card">
-            <div class="card-header">
-              <div class="card-title">玩家 A</div>
-              <div class="card-tag">Player A</div>
+        <div class="layout">
+          <!-- 左邊：地圖 -->
+          <section class="panel">
+            <div class="panel-header">
+              <div class="panel-title">地圖</div>
+              <div class="panel-tag">Map View（以玩家 A 為中心）</div>
             </div>
-            <div class="card-body" id="player-a-status">
-              尚未有玩家資料
+            <div class="panel-body">
+              <div id="map-grid" class="map-grid">
+                <!-- 由 viewer.js 動態產生 -->
+              </div>
+              <div class="legend">
+                <div class="legend-item">
+                  <span class="legend-color legend-player-a"></span><span>玩家 A</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color legend-player-b"></span><span>玩家 B</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color legend-destination"></span><span>終點</span>
+                </div>
+                <div class="legend-item">
+                  <span class="legend-color legend-shop"></span><span>店舖</span>
+                </div>
+              </div>
             </div>
-          </article>
+          </section>
 
-          <!-- 玩家 B -->
-          <article class="card">
-            <div class="card-header">
-              <div class="card-title">玩家 B</div>
-              <div class="card-tag">Player B</div>
+          <!-- 右邊：玩家狀態＋終點／附近店舖 -->
+          <section class="panel">
+            <div class="panel-header">
+              <div class="panel-title">遊戲狀態</div>
+              <div class="panel-tag">Game Progress</div>
             </div>
-            <div class="card-body" id="player-b-status">
-              尚未有玩家資料
-            </div>
-          </article>
+            <div class="panel-body">
+              <!-- 玩家 A -->
+              <h3 style="margin: 4px 0 2px; font-size: 0.9rem;">玩家 A</h3>
+              <div id="player-a-status">尚未有玩家資料</div>
+              <ul id="player-a-shops" class="shops-list"></ul>
 
-          <!-- 目的地 -->
-          <article class="card">
-            <div class="card-header">
-              <div class="card-title">目的地</div>
-              <div class="card-tag">Destination</div>
+              <!-- 玩家 B -->
+              <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">玩家 B</h3>
+              <div id="player-b-status">尚未有玩家資料</div>
+              <ul id="player-b-shops" class="shops-list"></ul>
+
+              <!-- 終點 -->
+              <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">目的地</h3>
+              <div id="destination-status">尚未設定</div>
+              <ul id="destination-extra" class="status-list"></ul>
             </div>
-            <div class="card-body" id="destination-status">
-              尚未設定
-            </div>
-          </article>
+          </section>
         </div>
       </section>
-    </main>
-
-    <footer>
-      只讀觀眾畫面 · URL 必須帶 ?room=房間代碼
-    </footer>
-  </div>
-
-  <!-- 觀眾端邏輯：請確保 /js/viewer.js 已存在 -->
-  <script src="/js/viewer.js"></script>
-</body>
-</html>
+    <
