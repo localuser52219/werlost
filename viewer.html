@@ -5,11 +5,11 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- 外掛樣式檔：如果你已經有 css/viewer.css 就保留；沒有就可以先這樣寫 -->
+  <!-- 如已存在 css/viewer.css 可保留；否則此連結可先留著 -->
   <link rel="stylesheet" href="/css/viewer.css" />
 
   <style>
-    /* 可與 /css/viewer.css 合併使用；如果你已有樣式，這段只是安全預設 */
+    /* 基本樣式 -------------------------------------------------- */
     body{
       margin:0;
       padding:16px;
@@ -86,7 +86,9 @@
       background:rgba(0,0,0,.4);
       font-size:14px;
     }
+
     .map-wrapper{
+      position:relative; /* ★ 讓星星以地圖為定位基準 */
       padding:10px;
       border-radius:12px;
       background:radial-gradient(circle at top,#020617,#000);
@@ -97,6 +99,29 @@
     #viewerMap{
       display:block;
       background:#020617;
+    }
+
+    /* 目的地大星星 ICON ----------------------------------------- */
+    .goal-star {
+      position:absolute;
+      width:40px;
+      height:40px;
+      transform:translate(-50%, -50%);
+      pointer-events:none;
+      z-index:50;
+      background:url('data:image/svg+xml;utf8,\
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">\
+          <polygon points="32,4 39,24 60,24 42,38 48,58 32,46 16,58 22,38 4,24 25,24" \
+            fill="%23facc15" stroke="%23fde047" stroke-width="4" />\
+        </svg>') no-repeat center center / contain;
+      filter:drop-shadow(0 0 6px rgba(250,204,21,.9))
+             drop-shadow(0 0 12px rgba(250,204,21,.6));
+      animation:starPulse 1.6s ease-in-out infinite;
+    }
+    @keyframes starPulse {
+      0%   { transform:translate(-50%, -50%) scale(0.88); opacity:0.85; }
+      50%  { transform:translate(-50%, -50%) scale(1.16); opacity:1; }
+      100% { transform:translate(-50%, -50%) scale(0.88); opacity:0.85; }
     }
 
     @media (max-width:768px){
@@ -136,24 +161,23 @@
       <!-- 大地圖畫面：用 canvas 繪製 -->
       <section class="map-section">
         <div class="map-wrapper">
-          <!-- 注意：寬高會由 viewer.js 根據地圖尺寸自動設定 -->
+          <!-- 寬高由 viewer.js 根據地圖尺寸自動設定 -->
           <canvas id="viewerMap"></canvas>
         </div>
       </section>
     </main>
   </div>
 
-  <!-- Supabase JS（CDN 版本，若你已有就不要重複載入） -->
+  <!-- Supabase JS（CDN 版本） -->
   <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
 
-  <!-- 你的 Supabase 客戶端初始化：負責設定 window._supabase -->
-  <!-- 確保這個檔案內已使用你提供的 URL & anon key -->
+  <!-- Supabase 客戶端初始化：設定 window._supabase -->
   <script src="/js/supabaseClient.js"></script>
 
-  <!-- 店舖名與地圖生成：必須提供 generateMap / isWall / getShopName（如有） -->
+  <!-- 店舖名與地圖生成：提供 generateMap / isWall / getShopName -->
   <script src="/js/shopName.js"></script>
 
-  <!-- 觀眾端邏輯（前一訊息給你的新版 viewer.js） -->
+  <!-- 觀眾端邏輯：需使用你現在的 viewer.js（已修正交叉點座標與目的地） -->
   <script src="/js/viewer.js"></script>
 </body>
 </html>
