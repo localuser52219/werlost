@@ -1,12 +1,22 @@
-// /js/viewer.js
+// js/viewer.js
+// 迷路追蹤器 觀眾端 Viewer 最終版
+// 需求：
+// - URL ?room=xxx（相容 ?code=xxx）
+// - 從 Supabase 讀取 rooms / players
+// - 用 generateMap(seed, map_size) 產生牆壁
+// - 用 getShopName(seed, x, y) 產生店舖名稱
+// - 以玩家 A 為中心顯示最多 25×25 地圖
+// - 顯示玩家 A / B、終點位置
+// - 顯示兩玩家附近店舖列表
+// - 每 1 秒輪詢更新
 
 (function () {
-  // ===== 0. Supabase 設定（你一定要改成自己的值） =====
-  const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
-  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qcnN5dWx1b3pqZ3hndWNsZWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDQ3OTEsImV4cCI6MjA3ODY4MDc5MX0.Y7tGY-s6iNdSq7D46sf4dVJh6qKDuTYrXWgX-NJGG_4";
-
-  // 利用 CDN 提供的全域 window.supabase 建立 client
-  const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  // 最大視窗尺寸（格數）
+  const MAX_VIEW_SIZE = 25;
+  // 玩家附近店舖搜尋半徑（曼哈頓距離）
+  const NEAR_SHOP_RADIUS = 2;
+  // 輪詢間隔（毫秒）
+  const POLL_INTERVAL_MS = 1000;
 
   function logDebug(message, extra) {
     try {
@@ -14,7 +24,9 @@
       if (params.get("debug") === "1") {
         console.log("[viewer]", message, extra || "");
       }
-    } catch (_) {}
+    } catch (_) {
+      // 忽略除錯錯誤
+    }
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -31,10 +43,11 @@
 
     const playerAStatusEl = document.getElementById("player-a-status");
     const playerBStatusEl = document.getElementById("player-b-status");
-    const destinationStatusEl = document.getElementById("destination-status");
-    const destinationExtraEl = document.getElementById("destination-extra");
     const playerAShopsEl = document.getElementById("player-a-shops");
     const playerBShopsEl = document.getElementById("player-b-shops");
+
+    const destinationStatusEl = document.getElementById("destination-status");
+    const destinationExtraEl = document.getElementById("destination-extra");
 
     function showError(message) {
       if (errorEl) {
@@ -44,15 +57,11 @@
     }
 
     function hideMain() {
-      if (mainEl) {
-        mainEl.style.display = "none";
-      }
+      if (mainEl) mainEl.style.display = "none";
     }
 
     function showMain() {
-      if (mainEl) {
-        mainEl.style.display = "";
-      }
+      if (mainEl) mainEl.style.display = "";
     }
 
     function ensureDefaultText() {
@@ -69,7 +78,7 @@
 
     ensureDefaultText();
 
-    // 沒有房間代碼：直接錯誤
+    // 無房間代碼：直接錯誤
     if (!roomCode) {
       logDebug("No room code in URL");
       showError("URL 缺少 ?room= 房間代碼");
@@ -77,7 +86,7 @@
       return;
     }
 
-    // 相容舊的 ?code=
+    // 相容舊版 ?code=
     if (roomFromCode && !roomFromRoom) {
       try {
         const url = new URL(window.location.href);
@@ -89,14 +98,11 @@
       }
     }
 
-    // 有房間：顯示主畫面
+    // 顯示主畫面
     showError("");
     showMain();
 
-    if (roomCodeEl) {
-      roomCodeEl.textContent = roomCode;
-    }
-
+    if (roomCodeEl) roomCodeEl.textContent = roomCode;
     try {
       document.title = "迷路追蹤器 觀眾端 Viewer – 房間 " + roomCode;
     } catch (err) {
@@ -105,90 +111,158 @@
 
     ensureDefaultText();
 
-    // ===== 1. 從 Supabase 讀取遊戲狀態 =====
+    // Supabase client 來自 js/supabaseClient.js
+    function getSupabase() {
+      const client = window._supabase;
+      if (!client) {
+        console.error("[viewer] window._supabase 未初始化，請確認 supabaseClient.js 已正確載入");
+      }
+      return client;
+    }
 
-    async function fetchGameState(currentRoom) {
+    let pollTimer = null;
+    let isFetching = false;
+    let lastRoomId = null;
+    let lastSeed = null;
+    let lastMapSize = null;
+    let lastMap = null;
+
+    // ===== 1. 讀取遊戲狀態 =====
+    async function fetchAndRender(currentRoomCode) {
+      if (isFetching) return;
+      const supabase = getSupabase();
+      if (!supabase) {
+        showError("Supabase 未初始化，請檢查腳本載入順序");
+        return;
+      }
+
+      isFetching = true;
+
       try {
-        // 1A. 讀取房間狀態（玩家位置＋終點）
-        const { data: roomData, error: roomError } = await supabase
-          .from("werlost_rooms") // TODO: 換成你的表名
-          .select("*")
-          .eq("room", currentRoom)
+        // 1A. rooms：根據 code 找房間
+        const { data: room, error: roomError } = await supabase
+          .from("rooms")
+          .select("id, code, seed, status, map_size, goal_shop, goal_x, goal_y")
+          .eq("code", currentRoomCode)
           .maybeSingle();
 
         if (roomError) {
           logDebug("Room fetch error", roomError);
-          showError("讀取房間狀態失敗（Supabase）");
+          showError("讀取房間資料失敗（Supabase）");
+          isFetching = false;
           return;
         }
 
-        if (!roomData) {
-          showError("找不到房間資料：" + currentRoom);
+        if (!room) {
+          showError("找不到房間：" + currentRoomCode);
+          isFetching = false;
           return;
         }
 
-        // 1B. 讀取房間店舖資料
-        const { data: shopsData, error: shopsError } = await supabase
-          .from("werlost_shops") // TODO: 換成你的表名
-          .select("*")
-          .eq("room", currentRoom);
+        // 1B. players：找該房間所有玩家
+        const { data: players, error: playersError } = await supabase
+          .from("players")
+          .select("id, room_id, role, x, y, updated_at")
+          .eq("room_id", room.id);
 
-        if (shopsError) {
-          logDebug("Shops fetch error", shopsError);
-          showError("讀取店舖資料失敗（Supabase）");
+        if (playersError) {
+          logDebug("Players fetch error", playersError);
+          showError("讀取玩家資料失敗（Supabase）");
+          isFetching = false;
           return;
         }
 
-        showError(""); // 成功讀到資料，清除錯誤
-        updateView(roomData, shopsData || []);
+        const playerA = players?.find(
+          (p) => String(p.role).toUpperCase() === "A"
+        ) || null;
+        const playerB = players?.find(
+          (p) => String(p.role).toUpperCase() === "B"
+        ) || null;
+
+        // 1C. 準備地圖
+        const seed = room.seed || String(room.id) || "default-seed";
+        const mapSize =
+          typeof room.map_size === "number" && room.map_size > 0
+            ? room.map_size
+            : MAX_VIEW_SIZE;
+
+        if (
+          lastRoomId !== room.id ||
+          lastSeed !== seed ||
+          lastMapSize !== mapSize ||
+          !lastMap
+        ) {
+          if (typeof window.generateMap === "function") {
+            lastMap = window.generateMap(seed, mapSize);
+            lastRoomId = room.id;
+            lastSeed = seed;
+            lastMapSize = mapSize;
+            logDebug("Generated map", { seed, mapSize });
+          } else {
+            lastMap = null;
+            console.error(
+              "[viewer] generateMap 未定義，請確認已載入 js/shopName.js"
+            );
+          }
+        }
+
+        const gameState = {
+          room,
+          seed,
+          mapSize,
+          map: lastMap,
+          playerA,
+          playerB,
+        };
+
+        renderGameState(gameState);
+        showError("");
       } catch (err) {
         logDebug("Unexpected fetch error", err);
         showError("讀取遊戲狀態時發生未預期錯誤");
+      } finally {
+        isFetching = false;
       }
     }
 
-    // ===== 2. 更新畫面（玩家狀態＋附近店舖＋終點） =====
+    // ===== 2. 更新畫面 =====
+    function renderGameState(state) {
+      const { room, seed, mapSize, map, playerA, playerB } = state;
 
-    function updateView(room, shops) {
-      const {
-        player_a_x,
-        player_a_y,
-        player_b_x,
-        player_b_y,
-        dest_x,
-        dest_y,
-        dest_name,
-      } = room;
-
-      // 2A. 玩家／終點文字狀態
+      // 2A. 玩家文字
       if (playerAStatusEl) {
-        if (typeof player_a_x === "number" && typeof player_a_y === "number") {
-          playerAStatusEl.textContent = `位置 (${player_a_x}, ${player_a_y})`;
+        if (
+          playerA &&
+          typeof playerA.x === "number" &&
+          typeof playerA.y === "number"
+        ) {
+          playerAStatusEl.textContent = `位置 (${playerA.x}, ${playerA.y})`;
         } else {
           playerAStatusEl.textContent = "尚未有玩家資料";
         }
       }
 
       if (playerBStatusEl) {
-        if (typeof player_b_x === "number" && typeof player_b_y === "number") {
-          playerBStatusEl.textContent = `位置 (${player_b_x}, ${player_b_y})`;
+        if (
+          playerB &&
+          typeof playerB.x === "number" &&
+          typeof playerB.y === "number"
+        ) {
+          playerBStatusEl.textContent = `位置 (${playerB.x}, ${playerB.y})`;
         } else {
           playerBStatusEl.textContent = "尚未有玩家資料";
         }
       }
 
+      // 2B. 終點文字
+      const destX = room.goal_x;
+      const destY = room.goal_y;
+      const destName = room.goal_shop;
+
       if (destinationStatusEl) {
-        if (
-          typeof dest_x === "number" &&
-          typeof dest_y === "number" &&
-          dest_name
-        ) {
-          destinationStatusEl.textContent = `${dest_name}，座標 (${dest_x}, ${dest_y})`;
-        } else if (
-          typeof dest_x === "number" &&
-          typeof dest_y === "number"
-        ) {
-          destinationStatusEl.textContent = `目的地座標 (${dest_x}, ${dest_y})`;
+        if (typeof destX === "number" && typeof destY === "number") {
+          const label = destName || "目的地";
+          destinationStatusEl.textContent = `${label}（${destX}, ${destY}）`;
         } else {
           destinationStatusEl.textContent = "尚未設定";
         }
@@ -196,140 +270,239 @@
 
       if (destinationExtraEl) {
         destinationExtraEl.innerHTML = "";
+
         if (
-          typeof player_a_x === "number" &&
-          typeof player_a_y === "number" &&
-          typeof dest_x === "number" &&
-          typeof dest_y === "number"
+          playerA &&
+          typeof playerA.x === "number" &&
+          typeof playerA.y === "number" &&
+          typeof destX === "number" &&
+          typeof destY === "number"
         ) {
           const distA =
-            Math.abs(player_a_x - dest_x) + Math.abs(player_a_y - dest_y);
-          const li = document.createElement("li");
-          li.textContent = `玩家 A 與終點的距離（曼哈頓距離）約為 ${distA} 格。`;
-          destinationExtraEl.appendChild(li);
+            Math.abs(playerA.x - destX) + Math.abs(playerA.y - destY);
+          const liA = document.createElement("li");
+          liA.textContent = `玩家 A 距離終點約 ${distA} 格（曼哈頓距離）。`;
+          destinationExtraEl.appendChild(liA);
+        }
+
+        if (
+          playerB &&
+          typeof playerB.x === "number" &&
+          typeof playerB.y === "number" &&
+          typeof destX === "number" &&
+          typeof destY === "number"
+        ) {
+          const distB =
+            Math.abs(playerB.x - destX) + Math.abs(playerB.y - destY);
+          const liB = document.createElement("li");
+          liB.textContent = `玩家 B 距離終點約 ${distB} 格（曼哈頓距離）。`;
+          destinationExtraEl.appendChild(liB);
         }
       }
 
-      // 2B. 玩家附近店舖列表（距離 <= 2 格）
-      function listNearbyShops(playerX, playerY, targetEl) {
-        if (!targetEl) return;
-        targetEl.innerHTML = "";
+      // 2C. 附近店舖列表（以虛擬店名生成）
+      updateNearbyShopsList(
+        seed,
+        map,
+        mapSize,
+        playerA,
+        playerAShopsEl,
+        "A"
+      );
+      updateNearbyShopsList(
+        seed,
+        map,
+        mapSize,
+        playerB,
+        playerBShopsEl,
+        "B"
+      );
 
-        if (typeof playerX !== "number" || typeof playerY !== "number") {
-          return;
-        }
+      // 2D. 地圖顯示
+      renderMapView(seed, map, mapSize, playerA, playerB, destX, destY);
+    }
 
-        const nearby = shops
-          .map((shop) => {
-            const dx = shop.x - playerX;
-            const dy = shop.y - playerY;
-            const dist = Math.abs(dx) + Math.abs(dy); // 曼哈頓距離
-            return { shop, dist };
-          })
-          .filter((item) => item.dist <= 2)
-          .sort((a, b) => a.dist - b.dist);
+    function updateNearbyShopsList(seed, map, mapSize, player, listEl, label) {
+      if (!listEl) return;
+      listEl.innerHTML = "";
 
-        nearby.forEach(({ shop, dist }) => {
-          const li = document.createElement("li");
-          const name = shop.name || shop.short_name || "店舖";
-          li.textContent = `${name}（座標 ${shop.x}, ${shop.y}，距離 ${dist}）`;
-          targetEl.appendChild(li);
-        });
+      if (
+        !player ||
+        typeof player.x !== "number" ||
+        typeof player.y !== "number"
+      ) {
+        const li = document.createElement("li");
+        li.textContent = "尚未有玩家座標";
+        listEl.appendChild(li);
+        return;
+      }
 
-        if (nearby.length === 0) {
-          const li = document.createElement("li");
-          li.textContent = "附近兩格內沒有店舖";
-          targetEl.appendChild(li);
+      if (!map || !Array.isArray(map) || !map[0]) {
+        const li = document.createElement("li");
+        li.textContent = "地圖尚未載入";
+        listEl.appendChild(li);
+        return;
+      }
+
+      const px = player.x;
+      const py = player.y;
+
+      const shopMap = new Map();
+      const hasIsWall = typeof window.isWall === "function";
+      const hasGetShopName = typeof window.getShopName === "function";
+
+      for (let dx = -NEAR_SHOP_RADIUS; dx <= NEAR_SHOP_RADIUS; dx++) {
+        for (let dy = -NEAR_SHOP_RADIUS; dy <= NEAR_SHOP_RADIUS; dy++) {
+          const x = px + dx;
+          const y = py + dy;
+
+          if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) continue;
+
+          const dist = Math.abs(dx) + Math.abs(dy);
+          if (dist === 0 || dist > NEAR_SHOP_RADIUS) continue;
+
+          if (hasIsWall && window.isWall(map, x, y)) continue;
+
+          let name = "";
+          if (hasGetShopName) {
+            name = window.getShopName(seed, x, y);
+          } else {
+            name = `店舖 (${x}, ${y})`;
+          }
+
+          const key = `${x},${y}`;
+          if (!shopMap.has(key)) {
+            shopMap.set(key, { x, y, dist, name });
+          }
         }
       }
 
-      listNearbyShops(player_a_x, player_a_y, playerAShopsEl);
-      listNearbyShops(player_b_x, player_b_y, playerBShopsEl);
+      const shops = Array.from(shopMap.values()).sort((a, b) => {
+        if (a.dist !== b.dist) return a.dist - b.dist;
+        if (a.y !== b.y) return a.y - b.y;
+        return a.x - b.x;
+      });
 
-      // 2C. 地圖顯示（以玩家 A 為中心）
+      if (shops.length === 0) {
+        const li = document.createElement("li");
+        li.textContent = "附近沒有可顯示的店舖";
+        listEl.appendChild(li);
+        return;
+      }
 
+      const MAX_LIST = 8;
+      shops.slice(0, MAX_LIST).forEach((s) => {
+        const li = document.createElement("li");
+        li.textContent = `${s.name}（${s.x}, ${s.y}，距離 ${s.dist}）`;
+        listEl.appendChild(li);
+      });
+    }
+
+    function renderMapView(
+      seed,
+      map,
+      mapSize,
+      playerA,
+      playerB,
+      destX,
+      destY
+    ) {
       if (!mapGridEl) return;
 
       mapGridEl.innerHTML = "";
 
-      if (typeof player_a_x !== "number" || typeof player_a_y !== "number") {
+      if (!map || !Array.isArray(map) || !map[0]) {
         const warn = document.createElement("div");
         warn.style.fontSize = "0.85rem";
         warn.style.opacity = "0.8";
-        warn.textContent = "玩家 A 尚未有座標，無法顯示地圖。";
+        warn.textContent = "地圖尚未生成。";
         mapGridEl.appendChild(warn);
         return;
       }
 
-      const size = 9; // 9x9 地圖
-      const radius = (size - 1) / 2;
-      const centerX = player_a_x;
-      const centerY = player_a_y;
+      const viewSize = Math.min(mapSize, MAX_VIEW_SIZE);
 
-      for (let dy = radius; dy >= -radius; dy--) {
-        for (let dx = -radius; dx <= radius; dx++) {
-          const cellX = centerX + dx;
-          const cellY = centerY + dy;
+      let centerX;
+      let centerY;
+      if (
+        playerA &&
+        typeof playerA.x === "number" &&
+        typeof playerA.y === "number"
+      ) {
+        centerX = playerA.x;
+        centerY = playerA.y;
+      } else {
+        centerX = Math.floor(mapSize / 2);
+        centerY = Math.floor(mapSize / 2);
+      }
 
+      const half = Math.floor(viewSize / 2);
+      let startX = centerX - half;
+      let startY = centerY - half;
+
+      if (startX < 0) startX = 0;
+      if (startY < 0) startY = 0;
+      if (startX + viewSize > mapSize) startX = mapSize - viewSize;
+      if (startY + viewSize > mapSize) startY = mapSize - viewSize;
+
+      mapGridEl.style.gridTemplateColumns = `repeat(${viewSize}, 1fr)`;
+
+      const hasIsWall = typeof window.isWall === "function";
+
+      for (let y = startY + viewSize - 1; y >= startY; y--) {
+        for (let x = startX; x < startX + viewSize; x++) {
           const cell = document.createElement("div");
           cell.className = "map-cell";
 
+          const isWallCell = hasIsWall ? window.isWall(map, x, y) : false;
+
+          const isA =
+            playerA &&
+            typeof playerA.x === "number" &&
+            typeof playerA.y === "number" &&
+            playerA.x === x &&
+            playerA.y === y;
+
+          const isB =
+            playerB &&
+            typeof playerB.x === "number" &&
+            typeof playerB.y === "number" &&
+            playerB.x === x &&
+            playerB.y === y;
+
+          const isDest =
+            typeof destX === "number" &&
+            typeof destY === "number" &&
+            destX === x &&
+            destY === y;
+
           const labelSpan = document.createElement("span");
           labelSpan.className = "map-cell-label";
+
           let label = "";
-          let type = "";
-
-          // 玩家／終點
-          const isA = cellX === player_a_x && cellY === player_a_y;
-          const isB =
-            typeof player_b_x === "number" &&
-            typeof player_b_y === "number" &&
-            cellX === player_b_x &&
-            cellY === player_b_y;
-          const isDest =
-            typeof dest_x === "number" &&
-            typeof dest_y === "number" &&
-            cellX === dest_x &&
-            cellY === dest_y;
-
-          if (isA) {
-            label = "A";
-            type = "player-a";
-          } else if (isB) {
-            label = "B";
-            type = "player-b";
-          }
-
-          if (isDest) {
-            // 若剛好玩家在終點，顯示「終」
-            label = "終";
-            type = "destination";
-          }
-
-          // 店舖（只取第一間）
-          const shopInCell = shops.find(
-            (s) => s.x === cellX && s.y === cellY
-          );
-          if (shopInCell) {
-            label =
-              shopInCell.short_name ||
-              shopInCell.name?.charAt(0) ||
-              (label || "店");
-            if (!type) {
-              type = "shop";
-            }
-          }
+          if (isA) label = "A";
+          if (isB) label = "B";
+          if (isDest) label = "終";
 
           labelSpan.textContent = label;
           cell.appendChild(labelSpan);
 
           const coordSpan = document.createElement("span");
           coordSpan.className = "map-cell-coord";
-          coordSpan.textContent = `${cellX},${cellY}`;
+          coordSpan.textContent = `${x},${y}`;
           cell.appendChild(coordSpan);
 
-          if (type) {
-            cell.classList.add("map-cell--" + type);
+          if (isWallCell) {
+            cell.classList.add("map-cell--wall");
+          }
+          if (isA) {
+            cell.classList.add("map-cell--player-a");
+          }
+          if (isB) {
+            cell.classList.add("map-cell--player-b");
+          }
+          if (isDest) {
+            cell.classList.add("map-cell--destination");
           }
 
           mapGridEl.appendChild(cell);
@@ -337,7 +510,24 @@
       }
     }
 
-    // ===== 3. 啟動讀取 =====
-    fetchGameState(roomCode);
+    // ===== 3. 啟動輪詢 =====
+    fetchAndRender(roomCode); // 立即載入一次
+
+    const supabase = getSupabase();
+    if (!supabase) {
+      // 沒有 Supabase client，無法輪詢
+      return;
+    }
+
+    const timer = window.setInterval(function () {
+      fetchAndRender(roomCode);
+    }, POLL_INTERVAL_MS);
+
+    // 離開頁面時清除
+    window.addEventListener("beforeunload", function () {
+      if (timer) {
+        clearInterval(timer);
+      }
+    });
   });
 })();
