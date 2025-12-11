@@ -1,21 +1,26 @@
 // js/viewer.js
-// 迷路追蹤器 觀眾端 Viewer（修正版）
-// 主要改動：
-// 1. Supabase 查詢改用 .select("*")，避免未知欄位造成 400 Bad Request
-// 2. 終點改為：由 seed + room 唯一抽出一個店舖位置，並在地圖以 ★ 顯示
-// 3. 終點店名由 getShopName(seed, goalX, goalY) 產生，無須 DB 欄位
+// 迷路追蹤器 觀眾端 Viewer（對齊交叉點模型與 2×2 視野）
 
 (function () {
   const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qcnN5dWx1b3pqZ3hndWNsZWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDQ3OTEsImV4cCI6MjA3ODY4MDc5MX0.Y7tGY-s6iNdSq7D46sf4dVJh6qKDuTYrXWgX-NJGG_4";
 
-  const MAX_VIEW_SIZE = 25;
-  const NEAR_SHOP_RADIUS = 2; // 玩家周圍四格 → 曼哈頓距離 1~2
-  const POLL_INTERVAL_MS = 1000;
-  const FOV_RANGE = 4; // 視野距離
+  // 顯示視窗大小（格數）：玩家 A 為中心，最大顯示 13×13
+  const MAX_VIEW_SIZE = 13;
 
-  // ---------- 基礎檢查 ----------
+  // 玩家附近店舖：只取上、下、左、右四格
+  const NEAR_OFFSETS = [
+    { dx: 0, dy: 1 },
+    { dx: 0, dy: -1 },
+    { dx: -1, dy: 0 },
+    { dx: 1, dy: 0 }
+  ];
+
+  const POLL_INTERVAL_MS = 1000;
+
+  const FOV_RANGE = 2; // 只用來過濾交叉點視野格的距離（實際 2×2 已由公式決定）
+
   if (!window.supabase) {
     console.error("[viewer] Supabase CDN 未載入");
     return;
@@ -44,7 +49,7 @@
     } catch (_) {}
   }
 
-  // hash 工具：優先用 shopName.js 提供的 hashToInt，否則用本地版本
+  // 優先使用 shopName.js 的 hashToInt
   function hashToIntSafe(str) {
     if (typeof window.hashToInt === "function") {
       return window.hashToInt(str);
@@ -56,13 +61,123 @@
     return h;
   }
 
-  // 由 seed + room.id 決定一個終點座標（確保 deterministic）
+  // 以 5×5 block 作群集，壓成 0..5 六類顏色
+  function getClusterId(seed, x, y) {
+    const block = 5;
+    const cx = Math.floor(x / block);
+    const cy = Math.floor(y / block);
+    const g = hashToIntSafe(seed + ":cluster:" + cx + ":" + cy);
+    return g % 6;
+  }
+
+  // 由 seed + room.id 決定一個終點座標（deterministic）
   function computeGoal(seed, mapSize, roomId) {
     const baseSeed = seed || String(roomId) || "default-seed";
     const h = hashToIntSafe(baseSeed + ":goal");
     const x = h % mapSize;
     const y = Math.floor(h / mapSize) % mapSize;
     return { x, y };
+  }
+
+  // 從 players 列中取得交叉點座標
+  function getPlayerIntersection(p) {
+    if (!p) return { ix: null, iy: null };
+    const ix =
+      p.ix !== null && p.ix !== undefined
+        ? p.ix
+        : p.x !== null && p.x !== undefined
+        ? p.x
+        : null;
+    const iy =
+      p.iy !== null && p.iy !== undefined
+        ? p.iy
+        : p.y !== null && p.y !== undefined
+        ? p.y
+        : null;
+    return { ix, iy };
+  }
+
+  // 與 player.js 相同的視野公式：交叉點 (ix,iy) → 前方左右 2×2 cell
+  // dir: 0=北,1=東,2=南,3=西
+  function getFovCells(ix, iy, dir) {
+    if (ix === null || iy === null) return null;
+
+    if (dir === 0) {
+      // 北：上方兩格列
+      return {
+        leftNear: { x: ix - 1, y: iy - 1 },
+        rightNear: { x: ix, y: iy - 1 },
+        leftFar: { x: ix - 1, y: iy - 2 },
+        rightFar: { x: ix, y: iy - 2 }
+      };
+    } else if (dir === 1) {
+      // 東：右邊兩格列
+      return {
+        leftNear: { x: ix, y: iy - 1 }, // 左 = 北
+        rightNear: { x: ix, y: iy }, // 右 = 南
+        leftFar: { x: ix + 1, y: iy - 1 },
+        rightFar: { x: ix + 1, y: iy }
+      };
+    } else if (dir === 2) {
+      // 南：下方兩格列
+      return {
+        leftNear: { x: ix, y: iy }, // 左 = 東
+        rightNear: { x: ix - 1, y: iy }, // 右 = 西
+        leftFar: { x: ix, y: iy + 1 },
+        rightFar: { x: ix - 1, y: iy + 1 }
+      };
+    } else {
+      // 3 = 西：左邊兩格列
+      return {
+        leftNear: { x: ix - 1, y: iy }, // 左 = 南
+        rightNear: { x: ix - 1, y: iy - 1 }, // 右 = 北
+        leftFar: { x: ix - 2, y: iy },
+        rightFar: { x: ix - 2, y: iy - 1 }
+      };
+    }
+  }
+
+  function buildFovSet(player, mapSize) {
+    const { ix, iy } = getPlayerIntersection(player);
+    const dir = Number.isInteger(player?.direction) ? player.direction : 0;
+    const f = getFovCells(ix, iy, dir);
+    const set = new Set();
+    if (!f) return set;
+
+    const cells = [f.leftNear, f.rightNear, f.leftFar, f.rightFar];
+    for (const c of cells) {
+      if (!c) continue;
+      if (
+        c.x < 0 ||
+        c.x >= mapSize ||
+        c.y < 0 ||
+        c.y >= mapSize
+      )
+        continue;
+      const dist =
+        Math.abs(c.x - (ix ?? 0)) + Math.abs(c.y - (iy ?? 0));
+      if (dist > FOV_RANGE + 2) continue; // 安全限制一下
+      set.add(c.x + "," + c.y);
+    }
+    return set;
+  }
+
+  function formatDirection(dir) {
+    const d = Number.isInteger(dir) ? dir : null;
+    if (d === 0) return "↑ 北";
+    if (d === 1) return "→ 東";
+    if (d === 2) return "↓ 南";
+    if (d === 3) return "← 西";
+    return "未知";
+  }
+
+  function arrowForDirection(dir) {
+    const d = Number.isInteger(dir) ? dir : null;
+    if (d === 0) return "↑";
+    if (d === 1) return "→";
+    if (d === 2) return "↓";
+    if (d === 3) return "←";
+    return "●";
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -93,6 +208,7 @@
     function showMain() {
       if (mainEl) mainEl.style.display = "";
     }
+
     function hideMain() {
       if (mainEl) mainEl.style.display = "none";
     }
@@ -117,7 +233,6 @@
       return;
     }
 
-    // 相容舊 ?code=
     if (roomFromCode && !roomFromRoom) {
       try {
         const url = new URL(window.location.href);
@@ -143,13 +258,11 @@
     let lastMapSize = null;
     let lastMap = null;
 
-    // ---------- 1. 讀取 rooms / players ----------
     async function fetchAndRender(code) {
       if (isFetching) return;
       isFetching = true;
 
       try {
-        // rooms：用 * 避免因欄位名稱不符導致 400
         const { data: room, error: roomError } = await supabase
           .from("rooms")
           .select("*")
@@ -168,7 +281,6 @@
           return;
         }
 
-        // players：同樣用 *
         const { data: players, error: playersError } = await supabase
           .from("players")
           .select("*")
@@ -187,11 +299,10 @@
           players?.find((p) => String(p.role).toUpperCase() === "B") || null;
 
         const seed = room.seed || String(room.id) || "default-seed";
-        const mapSizeRaw =
+        const mapSize =
           typeof room.map_size === "number" && room.map_size > 0
             ? room.map_size
-            : null;
-        const mapSize = mapSizeRaw || MAX_VIEW_SIZE;
+            : MAX_VIEW_SIZE;
 
         if (
           !lastMap ||
@@ -211,12 +322,11 @@
           }
         }
 
-        // 終點：若 DB 沒有 goal_x / goal_y，就用 computeGoal 決定
+        // 終點：若 DB 無 goal_x / goal_y，則由 seed 抽一個
         let destX =
           typeof room.goal_x === "number" ? room.goal_x : undefined;
         let destY =
           typeof room.goal_y === "number" ? room.goal_y : undefined;
-
         if (
           typeof destX !== "number" ||
           typeof destY !== "number" ||
@@ -236,7 +346,7 @@
           playerA,
           playerB,
           destX,
-          destY,
+          destY
         });
         showError("");
       } catch (e) {
@@ -247,20 +357,26 @@
       }
     }
 
-    // ---------- 2. 更新畫面 ----------
     function renderState(state) {
-      const { room, seed, mapSize, map, playerA, playerB, destX, destY } =
-        state;
+      const {
+        room,
+        seed,
+        mapSize,
+        map,
+        playerA,
+        playerB,
+        destX,
+        destY
+      } = state;
 
-      // 2A. 玩家文字狀態
+      // 玩家文字：明確寫「交叉點 ix / iy」
+      const posA = getPlayerIntersection(playerA);
+      const posB = getPlayerIntersection(playerB);
+
       if (playerAStatusEl) {
-        if (
-          playerA &&
-          typeof playerA.x === "number" &&
-          typeof playerA.y === "number"
-        ) {
-          playerAStatusEl.textContent = `位置 (${playerA.x}, ${playerA.y}) 面向 ${formatDirection(
-            playerA.direction
+        if (posA.ix !== null && posA.iy !== null) {
+          playerAStatusEl.textContent = `交叉點座標 (${posA.ix}, ${posA.iy})，面向 ${formatDirection(
+            playerA?.direction
           )}`;
         } else {
           playerAStatusEl.textContent = "尚未有玩家資料";
@@ -268,20 +384,16 @@
       }
 
       if (playerBStatusEl) {
-        if (
-          playerB &&
-          typeof playerB.x === "number" &&
-          typeof playerB.y === "number"
-        ) {
-          playerBStatusEl.textContent = `位置 (${playerB.x}, ${playerB.y}) 面向 ${formatDirection(
-            playerB.direction
+        if (posB.ix !== null && posB.iy !== null) {
+          playerBStatusEl.textContent = `交叉點座標 (${posB.ix}, ${posB.iy})，面向 ${formatDirection(
+            playerB?.direction
           )}`;
         } else {
           playerBStatusEl.textContent = "尚未有玩家資料";
         }
       }
 
-      // 2B. 終點店名（由 getShopName 生成）
+      // 終點店名
       let goalName = "";
       if (
         typeof destX === "number" &&
@@ -305,114 +417,59 @@
 
       if (destinationExtraEl) {
         destinationExtraEl.innerHTML = "";
-        if (
-          playerA &&
-          typeof playerA.x === "number" &&
-          typeof playerA.y === "number" &&
-          typeof destX === "number" &&
-          typeof destY === "number"
-        ) {
+        if (posA.ix !== null && posA.iy !== null) {
           const distA =
-            Math.abs(playerA.x - destX) + Math.abs(playerA.y - destY);
+            Math.abs(posA.ix - destX) + Math.abs(posA.iy - destY);
           const liA = document.createElement("li");
-          liA.textContent = `玩家 A 距離終點約 ${distA} 格（曼哈頓距離）。`;
+          liA.textContent = `玩家 A 的交叉點距離終點約 ${distA} 格。`;
           destinationExtraEl.appendChild(liA);
         }
-        if (
-          playerB &&
-          typeof playerB.x === "number" &&
-          typeof playerB.y === "number" &&
-          typeof destX === "number" &&
-          typeof destY === "number"
-        ) {
+        if (posB.ix !== null && posB.iy !== null) {
           const distB =
-            Math.abs(playerB.x - destX) + Math.abs(playerB.y - destY);
+            Math.abs(posB.ix - destX) + Math.abs(posB.iy - destY);
           const liB = document.createElement("li");
-          liB.textContent = `玩家 B 距離終點約 ${distB} 格（曼哈頓距離）。`;
+          liB.textContent = `玩家 B 的交叉點距離終點約 ${distB} 格。`;
           destinationExtraEl.appendChild(liB);
         }
       }
 
-      // 2C. 玩家附近店舖列表
+      // 玩家附近四格店舖（正上、正下、正左、正右）
       updateNearbyShops(
         seed,
         map,
         mapSize,
+        posA,
+        playerAShopsEl
+      );
+      updateNearbyShops(
+        seed,
+        map,
+        mapSize,
+        posB,
+        playerBShopsEl
+      );
+
+      // 地圖（含群集顏色／視野／終點／玩家箭嘴）
+      const fovSet = buildFovSet(playerA, mapSize);
+      renderMap(
+        seed,
+        map,
+        mapSize,
+        posA,
+        posB,
         playerA,
-        playerAShopsEl,
-        "A"
-      );
-      updateNearbyShops(
-        seed,
-        map,
-        mapSize,
         playerB,
-        playerBShopsEl,
-        "B"
+        destX,
+        destY,
+        fovSet
       );
-
-      // 2D. 地圖顯示
-      renderMap(seed, map, mapSize, playerA, playerB, destX, destY);
     }
 
-    function formatDirection(dir) {
-      const d = Number.isInteger(dir) ? dir : null;
-      if (d === 0) return "↑";
-      if (d === 1) return "→";
-      if (d === 2) return "↓";
-      if (d === 3) return "←";
-      return "未知";
-    }
-
-    function arrowForDirection(dir) {
-      const d = Number.isInteger(dir) ? dir : null;
-      if (d === 0) return "↑";
-      if (d === 1) return "→";
-      if (d === 2) return "↓";
-      if (d === 3) return "←";
-      return "●";
-    }
-
-    function inFov(player, x, y) {
-      if (
-        !player ||
-        typeof player.x !== "number" ||
-        typeof player.y !== "number"
-      )
-        return false;
-
-      const dx = x - player.x;
-      const dy = y - player.y;
-      const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist === 0 || dist > FOV_RANGE) return false;
-
-      const dir = Number.isInteger(player.direction) ? player.direction : -1;
-
-      if (dir === 0) {
-        if (dy <= 0) return false;
-        return Math.abs(dx) <= dy;
-      } else if (dir === 2) {
-        if (dy >= 0) return false;
-        return Math.abs(dx) <= -dy;
-      } else if (dir === 1) {
-        if (dx <= 0) return false;
-        return Math.abs(dy) <= dx;
-      } else if (dir === 3) {
-        if (dx >= 0) return false;
-        return Math.abs(dy) <= -dx;
-      }
-      return false;
-    }
-
-    function updateNearbyShops(seed, map, mapSize, player, listEl, label) {
+    function updateNearbyShops(seed, map, mapSize, pos, listEl) {
       if (!listEl) return;
       listEl.innerHTML = "";
 
-      if (
-        !player ||
-        typeof player.x !== "number" ||
-        typeof player.y !== "number"
-      ) {
+      if (pos.ix === null || pos.iy === null) {
         const li = document.createElement("li");
         li.textContent = "尚未有玩家座標";
         listEl.appendChild(li);
@@ -426,43 +483,31 @@
         return;
       }
 
-      const px = player.x;
-      const py = player.y;
-      const shopMap = new Map();
+      const shops = [];
+      const seen = new Set();
       const hasIsWall = typeof window.isWall === "function";
       const hasGetShopName = typeof window.getShopName === "function";
 
-      for (let dx = -NEAR_SHOP_RADIUS; dx <= NEAR_SHOP_RADIUS; dx++) {
-        for (let dy = -NEAR_SHOP_RADIUS; dy <= NEAR_SHOP_RADIUS; dy++) {
-          const x = px + dx;
-          const y = py + dy;
+      for (const off of NEAR_OFFSETS) {
+        const x = pos.ix + off.dx;
+        const y = pos.iy + off.dy;
 
-          if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) continue;
+        if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) continue;
 
-          const dist = Math.abs(dx) + Math.abs(dy);
-          if (dist === 0 || dist > NEAR_SHOP_RADIUS) continue;
+        if (hasIsWall && window.isWall(map, x, y)) continue;
 
-          if (hasIsWall && window.isWall(map, x, y)) continue;
-
-          let name = "";
-          if (hasGetShopName) {
-            name = window.getShopName(seed, x, y);
-          } else {
-            name = `店舖 (${x}, ${y})`;
-          }
-
-          const key = `${x},${y}`;
-          if (!shopMap.has(key)) {
-            shopMap.set(key, { x, y, dist, name });
-          }
+        let name = "";
+        if (hasGetShopName) {
+          name = window.getShopName(seed, x, y);
+        } else {
+          name = `店舖 (${x}, ${y})`;
         }
-      }
 
-      const shops = Array.from(shopMap.values()).sort((a, b) => {
-        if (a.dist !== b.dist) return a.dist - b.dist;
-        if (a.y !== b.y) return a.y - b.y;
-        return a.x - b.x;
-      });
+        const key = `${x},${y}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        shops.push({ x, y, name });
+      }
 
       if (shops.length === 0) {
         const li = document.createElement("li");
@@ -471,15 +516,25 @@
         return;
       }
 
-      const MAX_LIST = 4;
-      shops.slice(0, MAX_LIST).forEach((s) => {
+      shops.forEach((s) => {
         const li = document.createElement("li");
-        li.textContent = `${s.name}（${s.x}, ${s.y}，距離 ${s.dist}）`;
+        li.textContent = `${s.name}（${s.x}, ${s.y}）`;
         listEl.appendChild(li);
       });
     }
 
-    function renderMap(seed, map, mapSize, playerA, playerB, destX, destY) {
+    function renderMap(
+      seed,
+      map,
+      mapSize,
+      posA,
+      posB,
+      playerA,
+      playerB,
+      destX,
+      destY,
+      fovSet
+    ) {
       if (!mapGridEl) return;
       mapGridEl.innerHTML = "";
 
@@ -494,15 +549,12 @@
 
       const viewSize = Math.min(mapSize, MAX_VIEW_SIZE);
 
+      // 以玩家 A 交叉點為中心（如果沒有 A，就用地圖中央）
       let centerX;
       let centerY;
-      if (
-        playerA &&
-        typeof playerA.x === "number" &&
-        typeof playerA.y === "number"
-      ) {
-        centerX = playerA.x;
-        centerY = playerA.y;
+      if (posA.ix !== null && posA.iy !== null) {
+        centerX = posA.ix;
+        centerY = posA.iy;
       } else {
         centerX = Math.floor(mapSize / 2);
         centerY = Math.floor(mapSize / 2);
@@ -521,6 +573,21 @@
 
       const hasIsWall = typeof window.isWall === "function";
 
+      // 將交叉點轉成「代表格子」來畫箭嘴，用簡化方式：就近貼在交叉點右上方格
+      function intersectionToCell(pos) {
+        if (pos.ix === null || pos.iy === null) return null;
+        let cx = pos.ix;
+        let cy = pos.iy - 1; // 右上 NE cell
+        if (cx < 0) cx = 0;
+        if (cx >= mapSize) cx = mapSize - 1;
+        if (cy < 0) cy = 0;
+        if (cy >= mapSize) cy = mapSize - 1;
+        return { x: cx, y: cy };
+      }
+
+      const cellA = intersectionToCell(posA);
+      const cellB = intersectionToCell(posB);
+
       for (let y = startY + viewSize - 1; y >= startY; y--) {
         for (let x = startX; x < startX + viewSize; x++) {
           const cell = document.createElement("div");
@@ -529,18 +596,14 @@
           const isWallCell = hasIsWall ? window.isWall(map, x, y) : false;
 
           const isA =
-            playerA &&
-            typeof playerA.x === "number" &&
-            typeof playerA.y === "number" &&
-            playerA.x === x &&
-            playerA.y === y;
+            cellA &&
+            cellA.x === x &&
+            cellA.y === y;
 
           const isB =
-            playerB &&
-            typeof playerB.x === "number" &&
-            typeof playerB.y === "number" &&
-            playerB.x === x &&
-            playerB.y === y;
+            cellB &&
+            cellB.x === x &&
+            cellB.y === y;
 
           const isGoal =
             typeof destX === "number" &&
@@ -548,38 +611,49 @@
             destX === x &&
             destY === y;
 
+          if (!isWallCell) {
+            const clusterId = getClusterId(seed, x, y);
+            cell.classList.add("map-cell--cluster-" + clusterId);
+          }
+
+          if (isWallCell) {
+            cell.classList.remove(
+              "map-cell--cluster-0",
+              "map-cell--cluster-1",
+              "map-cell--cluster-2",
+              "map-cell--cluster-3",
+              "map-cell--cluster-4",
+              "map-cell--cluster-5"
+            );
+            cell.classList.add("map-cell--wall");
+          }
+
           const labelSpan = document.createElement("span");
           labelSpan.className = "map-cell-label";
 
           let label = "";
-          if (isA) label = arrowForDirection(playerA.direction);
-          if (isB) label = arrowForDirection(playerB.direction);
+          if (isA) label = arrowForDirection(playerA?.direction);
+          if (isB) label = arrowForDirection(playerB?.direction);
           if (isGoal) label = "★";
 
           labelSpan.textContent = label;
           cell.appendChild(labelSpan);
 
-          const coordSpan = document.createElement("span");
-          coordSpan.className = "map-cell-coord";
-          coordSpan.textContent = `${x},${y}`;
-          cell.appendChild(coordSpan);
+          // 視野（只標示玩家 A 的 2×2 格）
+          if (fovSet && fovSet.has(x + "," + y)) {
+            cell.classList.add("map-cell--fov");
+          }
 
-          if (isWallCell) cell.classList.add("map-cell--wall");
           if (isA) cell.classList.add("map-cell--player-a");
           if (isB) cell.classList.add("map-cell--player-b");
           if (isGoal) cell.classList.add("map-cell--goal");
-
-          // 視野：以玩家 A 為主
-          if (playerA && inFov(playerA, x, y)) {
-            cell.classList.add("map-cell--fov");
-          }
 
           mapGridEl.appendChild(cell);
         }
       }
     }
 
-    // ---------- 3. 啟動輪詢 ----------
+    // 啟動輪詢
     fetchAndRender(roomCode);
     pollTimer = window.setInterval(function () {
       fetchAndRender(roomCode);
