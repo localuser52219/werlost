@@ -1,214 +1,243 @@
-diff --git a/viewer.html b/viewer.html
-index 03a85a71e84ec385e539de7b6687f7df26fce21a..623df5673bc093b40eb9cfc53fa936ca8f38bc05 100644
---- a/viewer.html
-+++ b/viewer.html
-@@ -124,99 +124,122 @@
-     .panel-body {
-       font-size: 0.9rem;
-       line-height: 1.5;
-     }
- 
-     /* ===== 地圖區：外層包裹 + grid + 玩家 overlay ===== */
- 
-     .map-wrapper {
-       position: relative;
-       width: 100%;
-       max-width: 520px; /* 地圖尺寸可在此調整 */
-       margin: 0 auto;
-       aspect-ratio: 1 / 1;
-     }
- 
-     .map-grid {
-       position: absolute;
-       inset: 0;
-       display: grid;
-       grid-template-columns: repeat(9, 1fr); /* 會由 JS 改為 map_size */
-       gap: 2px;
-       border-radius: 10px;
-       background-color: #050814;
-       border: 1px solid rgba(255, 255, 255, 0.10);
-       padding: 0; /* 沒有 padding，格線與交叉點對齊 overlay 百分比 */
-+      z-index: 0;
-     }
- 
-     .map-cell {
-       position: relative;
-       width: 100%;
-       height: 100%;
-       border-radius: 3px;
-       display: flex;
-       align-items: center;
-       justify-content: center;
-       font-size: 0.75rem;
-       overflow: hidden;
-     }
- 
-+    .map-cluster-labels {
-+      position: absolute;
-+      inset: 0;
-+      pointer-events: none;
-+      z-index: 1;
-+    }
-+
-+    .map-cluster-label {
-+      position: absolute;
-+      display: flex;
-+      align-items: center;
-+      justify-content: center;
-+      text-align: center;
-+      font-size: clamp(0.8rem, 1vw + 0.6rem, 1.2rem);
-+      font-weight: 800;
-+      color: rgba(255, 255, 255, 0.95);
-+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
-+      opacity: 0.88;
-+      padding: 4px;
-+    }
-+
-     /* 群集底色（道路） */
-     .map-cell--cluster-0 { background: rgba(78, 99, 150, 0.55); }
-     .map-cell--cluster-1 { background: rgba(88, 140, 110, 0.55); }
-     .map-cell--cluster-2 { background: rgba(140, 104, 78, 0.55); }
-     .map-cell--cluster-3 { background: rgba(120, 92, 150, 0.55); }
-     .map-cell--cluster-4 { background: rgba(96, 120, 96, 0.55); }
-     .map-cell--cluster-5 { background: rgba(120, 120, 92, 0.55); }
- 
-     .map-cell--wall {
-       background: #050509;
-       border: 1px solid rgba(255, 255, 255, 0.35);
-     }
- 
-     .map-cell-label {
-       z-index: 1;
-       opacity: 0.95;
-     }
- 
-     .map-cell--goal {
-       background: rgba(255, 230, 120, 0.95);
-       color: #241c00;
-       font-weight: 800;
-       border: 1px solid rgba(255, 255, 255, 0.9);
-     }
- 
-     .map-cell--fov {
-       box-shadow: 0 0 0 2px rgba(80, 200, 255, 0.85) inset;
-     }
- 
-     /* 玩家 overlay：交叉點圓點 + 箭嘴 */
- 
-     .map-player-layer {
-       position: absolute;
-       inset: 0;
-       pointer-events: none;
-+      z-index: 2;
-     }
- 
-     .player-dot {
-       position: absolute;
-       width: 14px;
-       height: 14px;
-       border-radius: 50%;
-       display: flex;
-       align-items: center;
-       justify-content: center;
-       font-size: 10px;
-       font-weight: 700;
-       transform: translate(-50%, -50%);
-       box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
-     }
- 
-     .player-dot-a {
-       background: rgba(80, 200, 255, 0.95);
-       color: #021018;
-       border: 1px solid rgba(255, 255, 255, 0.9);
-     }
- 
-     .player-dot-b {
-       background: rgba(255, 170, 90, 0.95);
-       color: #1b0d02;
-@@ -273,83 +296,84 @@
- <body>
-   <div class="viewer-wrapper">
-     <header>
-       <h1>迷路追蹤器 觀眾端 Viewer</h1>
-       <div class="subtitle">顯示玩家交叉點位置、面向、視野、集中店舖與終點</div>
-     </header>
- 
-     <main>
-       <div id="viewer-error" class="error-bar"></div>
- 
-       <section id="viewer-main">
-         <div class="info-row">
-           <span class="badge-label">房間 Room</span>
-           <span class="room-code" id="room-code">---</span>
-         </div>
- 
-         <div class="layout">
-           <section class="panel">
-             <div class="panel-header">
-               <div class="panel-title">地圖</div>
-               <div class="panel-tag">全圖（格線交叉點 = 玩家座標）</div>
-             </div>
-             <div class="panel-body">
-               <div class="map-wrapper">
-                 <div id="map-grid" class="map-grid"></div>
-+                <div id="map-labels" class="map-cluster-labels"></div>
-                 <div id="player-layer" class="map-player-layer"></div>
-               </div>
-               <div style="margin-top: 6px; font-size: 0.78rem; opacity: 0.85;">
-                 顏色區塊表示店舖群集（集中生成區域），藍框為玩家視野。
-               </div>
-               <div class="legend">
-                 <div class="legend-item">
-                   <span class="legend-color legend-player-a"></span><span>玩家 A（圓點＋箭嘴）</span>
-                 </div>
-                 <div class="legend-item">
-                   <span class="legend-color legend-player-b"></span><span>玩家 B</span>
-                 </div>
-                 <div class="legend-item">
-                   <span class="legend-color legend-goal"></span><span>終點 ★</span>
-                 </div>
-                 <div class="legend-item">
-                   <span class="legend-color legend-fov"></span><span>視野格（玩家 A + B）</span>
-                 </div>
-               </div>
-             </div>
-           </section>
- 
-           <section class="panel">
-             <div class="panel-header">
-               <div class="panel-title">遊戲狀態</div>
-               <div class="panel-tag">Game Progress</div>
-             </div>
-             <div class="panel-body">
-               <h3 style="margin: 4px 0 2px; font-size: 0.9rem;">玩家 A</h3>
-               <div id="player-a-status">尚未有玩家資料</div>
-               <ul id="player-a-shops" class="shops-list"></ul>
- 
-               <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">玩家 B</h3>
-               <div id="player-b-status">尚未有玩家資料</div>
-               <ul id="player-b-shops" class="shops-list"></ul>
- 
-               <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">終點</h3>
-               <div id="destination-status">尚未設定</div>
-               <ul id="destination-extra" class="status-list"></ul>
-             </div>
-           </section>
-         </div>
-       </section>
-     </main>
- 
-     <footer>
-       只讀觀眾畫面 · URL 必須帶 ?room=房間代碼（例如 viewer.html?room=fff）
-     </footer>
-   </div>
- 
--  <!-- Supabase CDN -->
--  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-+  <!-- Supabase CDN（使用 UMD 版本以提供 window.supabase ） -->
-+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
-   <!-- 店舖 / 地圖生成工具：提供 generateMap / getShopName / isWall / hashToInt -->
-   <script src="js/shopName.js"></script>
-   <!-- 觀眾端主程式 -->
-   <script src="js/viewer.js"></script>
- </body>
- </html>
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>迷路城市｜觀眾端 Viewer</title>
+  <style>
+    /* 重置與基礎設定 */
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; padding: 0;
+      font-family: system-ui, -apple-system, sans-serif;
+      background: #0f172a;
+      color: #e2e8f0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .viewer-wrapper {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      max-width: 1000px;
+      margin: 0 auto;
+      width: 100%;
+      padding: 10px;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    header h1 { margin: 0; font-size: 1.5rem; color: #fff; letter-spacing: 0.05em; }
+    header .subtitle { font-size: 0.85rem; color: #94a3b8; margin-top: 4px; }
+
+    .error-bar {
+      display: none;
+      background: #ef4444; color: #fff;
+      padding: 8px; text-align: center;
+      border-radius: 6px; margin-bottom: 10px;
+      font-size: 0.9rem;
+    }
+
+    /* 版面佈局 */
+    .layout {
+      display: grid;
+      grid-template-columns: 1fr 300px;
+      gap: 20px;
+      align-items: start;
+    }
+    @media (max-width: 768px) {
+      .layout { grid-template-columns: 1fr; }
+    }
+
+    .info-row {
+      display: flex; align-items: center; justify-content: center;
+      gap: 10px; margin-bottom: 16px;
+    }
+    .badge-label {
+      background: #334155; color: #cbd5e1;
+      padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;
+    }
+    .room-code {
+      font-family: monospace; font-size: 1.4rem; font-weight: bold;
+      color: #38bdf8; letter-spacing: 2px;
+    }
+
+    /* Panel 卡片樣式 */
+    .panel {
+      background: #1e293b;
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 16px;
+    }
+    .panel-header {
+      display: flex; justify-content: space-between; align-items: baseline;
+      margin-bottom: 12px; border-bottom: 1px solid rgba(255,255,255,0.05);
+      padding-bottom: 8px;
+    }
+    .panel-title { font-weight: 600; color: #f1f5f9; }
+    .panel-tag { font-size: 0.75rem; color: #64748b; }
+    
+    .shops-list, .status-list {
+      list-style: none; padding: 0; margin: 0;
+      font-size: 0.9rem; color: #cbd5e1;
+    }
+    .shops-list li {
+      padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,0.1);
+    }
+
+    /* ===== 地圖區 ===== */
+    .map-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      aspect-ratio: 1 / 1;
+    }
+
+    .map-grid {
+      position: absolute; inset: 0;
+      display: grid;
+      /* grid-template-columns 會由 JS 動態設定 */
+      gap: 1px;
+      background-color: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      z-index: 0;
+    }
+
+    .map-cell {
+      position: relative; width: 100%; height: 100%;
+      overflow: hidden;
+    }
+
+    /* 地圖群集文字層 */
+    .map-cluster-labels {
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 1;
+    }
+    .map-cluster-label {
+      position: absolute;
+      display: flex; align-items: center; justify-content: center;
+      text-align: center;
+      font-size: clamp(0.8rem, 1.2vw, 1.2rem);
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.9);
+      text-shadow: 0 0 4px rgba(0,0,0,0.8);
+      opacity: 0.8;
+    }
+
+    /* 顏色定義 */
+    .map-cell--cluster-0 { background: rgba(78, 99, 150, 0.4); }
+    .map-cell--cluster-1 { background: rgba(88, 140, 110, 0.4); }
+    .map-cell--cluster-2 { background: rgba(140, 104, 78, 0.4); }
+    .map-cell--cluster-3 { background: rgba(120, 92, 150, 0.4); }
+    .map-cell--cluster-4 { background: rgba(96, 120, 96, 0.4); }
+    .map-cell--cluster-5 { background: rgba(120, 120, 92, 0.4); }
+    
+    .map-cell--wall { background: #020617; border: 1px solid rgba(255,255,255,0.15); }
+    .map-cell--goal { background: rgba(250, 204, 21, 0.8); }
+    .map-cell--fov { box-shadow: inset 0 0 0 2px rgba(56, 189, 248, 0.8); }
+
+    /* 玩家圖層 */
+    .map-player-layer {
+      position: absolute; inset: 0;
+      pointer-events: none; z-index: 2;
+    }
+    .player-dot {
+      position: absolute;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px; font-weight: 700;
+      transform: translate(-50%, -50%); /* 居中於交叉點 */
+      box-shadow: 0 0 6px rgba(0,0,0,0.8);
+      transition: all 0.3s ease;
+    }
+    .player-dot-a { background: #38bdf8; color: #000; border: 2px solid #fff; }
+    .player-dot-b { background: #fb923c; color: #000; border: 2px solid #fff; }
+
+    /* 圖例 */
+    .legend { display: flex; gap: 12px; margin-top: 10px; flex-wrap: wrap; font-size: 0.8rem; color: #94a3b8; }
+    .legend-item { display: flex; align-items: center; gap: 4px; }
+    .legend-color { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .legend-player-a { background: #38bdf8; }
+    .legend-player-b { background: #fb923c; }
+    .legend-goal { background: #facc15; }
+    .legend-fov { border: 2px solid #38bdf8; box-sizing: border-box; }
+
+    footer {
+      text-align: center; margin-top: auto; padding: 10px;
+      font-size: 0.8rem; color: #475569;
+    }
+  </style>
+</head>
+<body>
+  <div class="viewer-wrapper">
+    <header>
+      <h1>迷路城市｜上帝視角 Viewer</h1>
+      <div class="subtitle">即時監控玩家位置與視野</div>
+    </header>
+
+    <div id="viewer-error" class="error-bar"></div>
+
+    <section id="viewer-main">
+      <div class="info-row">
+        <span class="badge-label">房間代碼</span>
+        <span class="room-code" id="room-code">---</span>
+      </div>
+
+      <div class="layout">
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">即時地圖</div>
+            <div class="panel-tag">格線交叉點 = 玩家位置</div>
+          </div>
+          <div class="map-wrapper">
+            <div id="map-grid" class="map-grid"></div>
+            <div id="map-labels" class="map-cluster-labels"></div>
+            <div id="player-layer" class="map-player-layer"></div>
+          </div>
+          <div class="legend">
+            <div class="legend-item"><span class="legend-color legend-player-a"></span> A</div>
+            <div class="legend-item"><span class="legend-color legend-player-b"></span> B</div>
+            <div class="legend-item"><span class="legend-color legend-goal"></span> 終點</div>
+            <div class="legend-item"><span class="legend-color legend-fov"></span> 視野</div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-header">
+            <div class="panel-title">狀態資訊</div>
+          </div>
+          
+          <h3 style="margin: 0 0 6px; font-size: 0.9rem; color:#38bdf8;">玩家 A</h3>
+          <div id="player-a-status" style="font-size:0.85rem; margin-bottom:8px;">等待中...</div>
+          <ul id="player-a-shops" class="shops-list"></ul>
+
+          <h3 style="margin: 16px 0 6px; font-size: 0.9rem; color:#fb923c;">玩家 B</h3>
+          <div id="player-b-status" style="font-size:0.85rem; margin-bottom:8px;">等待中...</div>
+          <ul id="player-b-shops" class="shops-list"></ul>
+
+          <h3 style="margin: 16px 0 6px; font-size: 0.9rem; color:#facc15;">終點目標</h3>
+          <div id="destination-status" style="font-size:0.85rem;">---</div>
+        </section>
+      </div>
+    </section>
+
+    <footer>
+      請在網址後方加上 ?room=您的代碼 (例如 viewer.html?room=TEST)
+    </footer>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+  
+  <script src="js/shopName.js"></script>
+  
+  <script src="js/viewer.js"></script>
+</body>
+</html>
