@@ -1,5 +1,5 @@
 // js/viewer.js
-// 迷路追蹤器 觀眾端 Viewer（修正還原版）
+// 迷路追蹤器 觀眾端 Viewer（修正版：正方格/正確分類/視野修正）
 
 (function () {
   const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
@@ -9,10 +9,16 @@
   let supabaseClient = null;
 
   const CLUSTER_BLOCK_SIZE = 5;
-  const POLL_INTERVAL_MS = 2000; // 放寬一點避免太頻繁
+  const POLL_INTERVAL_MS = 2000;
   const REALTIME_CHANNEL_PREFIX = "viewer_room_";
 
-  // 工具：Debug log
+  // 從 shopName.js 複製來的類型列表，用於正確分類群集
+  const TYPE_LIST = [
+    '咖啡☕','麵包🥐','藥房💊','便利🛒','診所⚕️','書店📘','文具✏️','花店🌸','茶館🍵','冰室🧊',
+    '餐室🍱','早餐🥚','超市🏪','百貨🛍️','手機📱','服裝👗','玩具🧸','五金🔧','報攤📰','雜貨🧂',
+    '水果🍎','麵舖🍜','點心🍡','甜品🍰','生活🧴','市集🎪','零食🍿','飲品🥤','湯品🍲','麵食🍝'
+  ];
+
   function logDebug(message, extra) {
     try {
       const params = new URLSearchParams(window.location.search);
@@ -22,7 +28,6 @@
     } catch (_) {}
   }
 
-  // 工具：Hash
   function hashToIntSafe(str) {
     if (typeof window.hashToInt === "function") {
       return window.hashToInt(str);
@@ -34,28 +39,29 @@
     return h;
   }
 
-  // 計算群集 ID
+  // 計算群集顏色 ID (0-5)
   function getClusterId(seed, x, y) {
-    const block = 5;
+    const block = CLUSTER_BLOCK_SIZE;
     const cx = Math.floor(x / block);
     const cy = Math.floor(y / block);
     const g = hashToIntSafe(seed + ":cluster:" + cx + ":" + cy);
     return g % 6; 
   }
 
-  // 取得群集顯示名稱（大字）
+  // 取得群集的主要商店類型名稱 (修正：直接計算 Dominant Type)
   function getClusterTypeLabel(seed, x, y) {
-    // 這裡直接呼叫 getShopName，它會回傳完整店名，我們只取「種類」或簡化顯示
-    if (typeof window.getShopName === "function") {
-      const name = window.getShopName(seed, x, y);
-      // 簡單處理：只取中間的 emoji 或店名關鍵字
-      // 但為了簡單，直接顯示該區塊第一間店的名字作為代表
-      return name;
-    }
-    return "";
+    const block = CLUSTER_BLOCK_SIZE;
+    const cx = Math.floor(x / block);
+    const cy = Math.floor(y / block);
+    
+    // 計算該群集的種子
+    const groupSeed = hashToIntSafe(seed + ':cluster:' + cx + ':' + cy);
+    // 取餘數得到 dominant index
+    const dominantIndex = groupSeed % TYPE_LIST.length;
+    
+    return TYPE_LIST[dominantIndex];
   }
 
-  // 計算終點
   function computeGoal(seed, mapSize, roomId) {
     const baseSeed = seed || String(roomId) || "default-seed";
     const h = hashToIntSafe(baseSeed + ":goal");
@@ -64,7 +70,6 @@
     return { x, y };
   }
 
-  // 取得玩家交叉點位置 (ix, iy 優先)
   function getPlayerIntersection(p) {
     if (!p) return { ix: null, iy: null };
     const ix = (p.ix !== null && p.ix !== undefined) ? p.ix : (p.x !== null ? p.x : null);
@@ -81,13 +86,19 @@
     dir = ((dir % 4) + 4) % 4;
 
     const offsets = [];
-    // 根據 js/player.js 的定義：
-    // 0=北(上方兩格), 1=東(右方兩格), 2=南(下方兩格), 3=西(左方兩格)
-    // 且格子座標相對於交叉點 (ix, iy) 的位置
+    // 修正：針對 dir=1 (東) 的偏移量修正
+    // 0=北 (上方兩格)
+    // 1=東 (右方兩格) -> 修正為 ix, iy (近) 與 ix+1, iy (遠)
+    // 2=南 (下方兩格)
+    // 3=西 (左方兩格)
+
     if (dir === 0) { // 北
       offsets.push({dx:-1, dy:-1}, {dx:0, dy:-1}, {dx:-1, dy:-2}, {dx:0, dy:-2});
     } else if (dir === 1) { // 東
-      offsets.push({dx:1, dy:-1}, {dx:1, dy:0}, {dx:2, dy:-1}, {dx:2, dy:0});
+      // 修正：原本可能是 ix+1 開始，現在改為從 ix 開始，與 player.js 邏輯一致
+      // Near: (ix, iy-1), (ix, iy) -> dx=0
+      // Far:  (ix+1, iy-1), (ix+1, iy) -> dx=1
+      offsets.push({dx:0, dy:-1}, {dx:0, dy:0}, {dx:1, dy:-1}, {dx:1, dy:0});
     } else if (dir === 2) { // 南
       offsets.push({dx:-1, dy:0}, {dx:0, dy:0}, {dx:-1, dy:1}, {dx:0, dy:1});
     } else { // 西
@@ -141,12 +152,10 @@
       }
     }
 
-    // 初始化 Supabase
     if (!window.supabase) {
       showError("Supabase library 未載入，請檢查網路或 CDN。");
       return;
     }
-    // 建立獨立的 Client
     supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
     if (!roomCode) {
@@ -159,7 +168,6 @@
     let isFetching = false;
     let pollTimer = null;
     let realtimeChannel = null;
-    let lastRoomId = null;
     let lastMap = null;
     let lastSeed = null;
     let lastMapSize = null;
@@ -168,7 +176,6 @@
       if (isFetching) return;
       isFetching = true;
       try {
-        // 1. 抓房間
         const { data: room, error: roomError } = await supabaseClient
           .from("rooms").select("*").eq("code", roomCode).maybeSingle();
 
@@ -178,7 +185,6 @@
           return;
         }
 
-        // 2. 抓玩家
         const { data: players, error: playersError } = await supabaseClient
           .from("players").select("*").eq("room_id", room.id);
 
@@ -192,7 +198,6 @@
         const seed = room.seed || "default";
         const mapSize = room.map_size || 25;
 
-        // 生成地圖 (若變更)
         if (!lastMap || lastSeed !== seed || lastMapSize !== mapSize) {
           if (typeof window.generateMap === "function") {
             lastMap = window.generateMap(seed, mapSize);
@@ -201,22 +206,19 @@
           }
         }
 
-        // 確保 Realtime
         ensureRealtime(room.id);
 
-        // 計算目標
         let destX = room.goal_x, destY = room.goal_y;
         if (destX === undefined || destY === undefined || destX === null) {
           const g = computeGoal(seed, mapSize, room.id);
           destX = g.x; destY = g.y;
         }
 
-        // 渲染畫面
         renderAll({
           room, seed, mapSize, map: lastMap,
           playerA, playerB, destX, destY
         });
-        showError(""); // 清除錯誤
+        showError("");
 
       } catch(e) {
         console.error(e);
@@ -228,7 +230,7 @@
 
     function ensureRealtime(roomId) {
       const channelName = REALTIME_CHANNEL_PREFIX + roomId;
-      if (realtimeChannel) return; // 已訂閱
+      if (realtimeChannel) return;
 
       realtimeChannel = supabaseClient.channel(channelName)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'players', filter: `room_id=eq.${roomId}` }, 
@@ -236,7 +238,6 @@
         .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'rooms', filter: `id=eq.${roomId}` }, 
           () => fetchAndRender())
         .subscribe();
-      logDebug("Realtime 訂閱成功", channelName);
     }
 
     function renderAll(state) {
@@ -245,26 +246,22 @@
       const posA = getPlayerIntersection(playerA);
       const posB = getPlayerIntersection(playerB);
 
-      // 更新文字狀態
       if(playerAStatusEl) playerAStatusEl.textContent = 
         posA.ix !== null ? `(${posA.ix}, ${posA.iy}) ${formatDirection(playerA.direction)}` : "未加入";
       if(playerBStatusEl) playerBStatusEl.textContent = 
         posB.ix !== null ? `(${posB.ix}, ${posB.iy}) ${formatDirection(playerB.direction)}` : "未加入";
       
       if(destinationStatusEl) {
-        // 取得終點店名
         const destName = (typeof window.getShopName === "function") 
           ? window.getShopName(seed, destX, destY) : `(${destX}, ${destY})`;
         destinationStatusEl.textContent = `${destName} (${destX}, ${destY})`;
       }
 
-      // 更新視野列表
       const fovA = buildFovSet(playerA, mapSize);
       const fovB = buildFovSet(playerB, mapSize);
       updateShopList(playerAShopsEl, fovA, seed);
       updateShopList(playerBShopsEl, fovB, seed);
 
-      // 繪製地圖
       renderMapGrid(state, fovA, fovB);
     }
 
@@ -274,7 +271,7 @@
       if(fovSet.size === 0) {
         el.innerHTML = "<li>無視野</li>"; return;
       }
-      const arr = Array.from(fovSet).slice(0, 4); // 最多顯示4個
+      const arr = Array.from(fovSet).slice(0, 4);
       arr.forEach(coord => {
         const [x, y] = coord.split(',').map(Number);
         const name = window.getShopName ? window.getShopName(seed, x, y) : "???";
@@ -288,22 +285,17 @@
       const { mapSize, seed, map, destX, destY, playerA, playerB } = state;
       if (!mapGridEl) return;
 
-      // 如果地圖大小變更，重繪 Grid
-      // 簡單起見，每次都清空重繪 DOM 雖然效能較差但最穩
       mapGridEl.innerHTML = "";
       mapLabelLayerEl.innerHTML = "";
       playerLayerEl.innerHTML = "";
 
-      // 設定 Grid Columns
       mapGridEl.style.gridTemplateColumns = `repeat(${mapSize}, 1fr)`;
 
-      // 繪製格子
       for (let y = 0; y < mapSize; y++) {
         for (let x = 0; x < mapSize; x++) {
           const cell = document.createElement("div");
           cell.className = "map-cell";
           
-          // 牆壁或道路
           const isWall = window.isWall ? window.isWall(map, x, y) : false;
           if (isWall) {
             cell.classList.add("map-cell--wall");
@@ -312,24 +304,20 @@
             cell.classList.add(`map-cell--cluster-${cid}`);
           }
 
-          // 視野
           const key = x + "," + y;
           if (fovA.has(key) || fovB.has(key)) {
             cell.classList.add("map-cell--fov");
           }
 
-          // 終點
           if (x === destX && y === destY) {
             cell.classList.add("map-cell--goal");
-            cell.textContent = "★";
+            // 移除星星，只保留背景色
           }
           
           mapGridEl.appendChild(cell);
         }
       }
 
-      // 繪製區域文字 (Cluster Labels)
-      // 每 5x5 一個大標籤
       const blocks = Math.ceil(mapSize / CLUSTER_BLOCK_SIZE);
       for(let cy=0; cy<blocks; cy++){
         for(let cx=0; cx<blocks; cx++){
@@ -337,18 +325,17 @@
           const y0 = cy * CLUSTER_BLOCK_SIZE;
           if(x0 >= mapSize || y0 >= mapSize) continue;
 
-          // 取得該區域名稱
+          // 使用新的邏輯取得「文具」、「食物」等類型
           const labelText = getClusterTypeLabel(seed, x0, y0);
           if(!labelText) continue;
 
-          // 計算位置百分比
           const w = Math.min(CLUSTER_BLOCK_SIZE, mapSize - x0);
           const h = Math.min(CLUSTER_BLOCK_SIZE, mapSize - y0);
           
           const label = document.createElement("div");
           label.className = "map-cluster-label";
-          // 簡化：只取前兩個字當大標題 (例如 "銀樹")
-          label.textContent = labelText.substring(0, 2); 
+          // 顯示完整類型文字（包含 Emoji），如 "文具✏️"
+          label.textContent = labelText; 
           
           label.style.left = (x0 / mapSize * 100) + "%";
           label.style.top = (y0 / mapSize * 100) + "%";
@@ -359,23 +346,15 @@
         }
       }
 
-      // 繪製玩家 (Overlay)
       function drawPlayer(p, cls) {
         const { ix, iy } = getPlayerIntersection(p);
         if (ix === null) return;
-        
-        // 取得 map-grid 的實際大小來計算 pixel 位置會比較準確
-        // 但這裡用百分比: ix 介於 0~mapSize
-        // 格線是畫在 cell 之間。第 0 條線在最左。第 mapSize 條線在最右。
-        // Grid 寬度 = mapSize * cellWidth
-        // 交叉點 ix 對應的 left% = (ix / mapSize) * 100%
         
         const dot = document.createElement("div");
         dot.className = "player-dot " + cls;
         dot.style.left = (ix / mapSize * 100) + "%";
         dot.style.top = (iy / mapSize * 100) + "%";
         
-        // 箭頭
         dot.textContent = arrowForDirection(p.direction);
         playerLayerEl.appendChild(dot);
       }
@@ -384,7 +363,6 @@
       drawPlayer(playerB, "player-dot-b");
     }
 
-    // 啟動
     fetchAndRender();
     pollTimer = setInterval(fetchAndRender, POLL_INTERVAL_MS);
   });
