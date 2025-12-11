@@ -5,6 +5,7 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
+  <!-- 如未來有獨立 viewer.css，可保留這行；目前主要用內嵌樣式 -->
   <link rel="stylesheet" href="/css/viewer.css" />
 
   <style>
@@ -130,13 +131,14 @@
     /* 地圖格子 */
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(9, 1fr);
+      grid-template-columns: repeat(9, 1fr); /* 會被 JS 覆蓋為 25 或 map_size */
       gap: 2px;
       margin-top: 8px;
       border-radius: 8px;
       padding: 6px;
       background: #050814;
       border: 1px solid rgba(255, 255, 255, 0.08);
+      min-height: 120px;
     }
 
     .map-cell {
@@ -148,6 +150,11 @@
       align-items: center;
       justify-content: center;
       font-size: 0.75rem;
+    }
+
+    /* 牆壁格 */
+    .map-cell--wall {
+      background: rgba(0, 0, 0, 0.7);
     }
 
     .map-cell-label {
@@ -163,22 +170,18 @@
     }
 
     .map-cell--player-a {
-      background: rgba(80, 200, 255, 0.55);
+      background: rgba(80, 200, 255, 0.7);
       font-weight: 600;
     }
 
     .map-cell--player-b {
-      background: rgba(255, 150, 70, 0.55);
+      background: rgba(255, 150, 70, 0.7);
       font-weight: 600;
     }
 
     .map-cell--destination {
-      background: rgba(160, 255, 120, 0.65);
+      background: rgba(160, 255, 120, 0.8);
       font-weight: 600;
-    }
-
-    .map-cell--shop {
-      box-shadow: inset 0 0 0 2px rgba(255, 255, 255, 0.6);
     }
 
     .legend {
@@ -220,17 +223,7 @@
       border: 2px solid rgba(255, 255, 255, 0.7);
     }
 
-    .status-list {
-      list-style: none;
-      padding-left: 0;
-      margin: 4px 0 0;
-      font-size: 0.85rem;
-    }
-
-    .status-list li {
-      margin-bottom: 2px;
-    }
-
+    .status-list,
     .shops-list {
       list-style: none;
       padding-left: 0;
@@ -238,6 +231,7 @@
       font-size: 0.85rem;
     }
 
+    .status-list li,
     .shops-list li {
       margin-bottom: 2px;
     }
@@ -291,7 +285,7 @@
                   <span class="legend-color legend-destination"></span><span>終點</span>
                 </div>
                 <div class="legend-item">
-                  <span class="legend-color legend-shop"></span><span>店舖</span>
+                  <span class="legend-color legend-shop"></span><span>店舖（附近列表顯示）</span>
                 </div>
               </div>
             </div>
@@ -322,4 +316,20 @@
           </section>
         </div>
       </section>
-    <
+    </main>
+
+    <footer>
+      只讀觀眾畫面 · URL 必須帶 ?room=房間代碼（例如 viewer.html?room=fff）
+    </footer>
+  </div>
+
+  <!-- Supabase CDN（必須在 supabaseClient.js 前） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- 初始化 Supabase client：建立 window._supabase -->
+  <script src="js/supabaseClient.js"></script>
+  <!-- 店舖名稱與地圖生成工具：getShopName / generateMap / isWall -->
+  <script src="js/shopName.js"></script>
+  <!-- 觀眾端邏輯 -->
+  <script src="js/viewer.js"></script>
+</body>
+</html>
