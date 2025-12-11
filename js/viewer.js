@@ -92,51 +92,55 @@
     return { ix, iy };
   }
 
-  // 以「南方 dir=2」為基準的 2×2 視野 offsets（交叉點為原點）
-  // 這組是目前你說「南方正確」時的格子分佈。
-  const BASE_FOV_OFFSETS_SOUTH = [
-    { dx: 0, dy: -1 },
-    { dx: -1, dy: -1 },
-    { dx: 0, dy: -2 },
-    { dx: -1, dy: -2 }
-  ];
-
-  // 對 offsets 做 90° 逆時針旋轉若干次
-  function rotateOffsetCCW(dx, dy, steps) {
-    let x = dx;
-    let y = dy;
-    const s = ((steps % 4) + 4) % 4;
-    for (let i = 0; i < s; i++) {
-      const nx = -y;
-      const ny = x;
-      x = nx;
-      y = ny;
-    }
-    return { dx: x, dy: y };
-  }
-
-  // 根據 direction（0/1/2/3）把南方基準 offsets 旋轉出各方向
-  // 假設 direction 編碼順序為 0=北,1=東,2=南,3=西
+  // 根據 direction（0=↑,1=→,2=↓,3=←）計算交叉點前方 2×2 視野
+  // 注意：這裡完全是「畫面邏輯」，確保視野與箭咀方向一致
   function buildFovSet(player, mapSize) {
     const { ix, iy } = getPlayerIntersection(player);
     if (ix === null || iy === null) return new Set();
 
-    const dir = Number.isInteger(player?.direction) ? player.direction : 2;
+    let dir = Number.isInteger(player?.direction) ? player.direction : 2;
+    dir = ((dir % 4) + 4) % 4;
 
-    // dir=2 南 → 0 步；dir=1 東 → 相對南向逆時針 3 步；dir=0 北 → 2 步；dir=3 西 → 1 步
-    // 這裡根據標準順序做旋轉，如果你的方向編碼有偏移，只需要在這裡調整 steps 對應。
-    let stepsFromSouth;
-    if (dir === 2) stepsFromSouth = 0;       // 南
-    else if (dir === 1) stepsFromSouth = 3;  // 東
-    else if (dir === 0) stepsFromSouth = 2;  // 北
-    else if (dir === 3) stepsFromSouth = 1;  // 西
-    else stepsFromSouth = 0;
+    const offsets = [];
+
+    if (dir === 2) {
+      // ↓ 南：交叉點下方 2×2
+      offsets.push(
+        { dx: 0, dy: -1 },
+        { dx: -1, dy: -1 },
+        { dx: 0, dy: -2 },
+        { dx: -1, dy: -2 }
+      );
+    } else if (dir === 0) {
+      // ↑ 北：交叉點上方 2×2
+      offsets.push(
+        { dx: -1, dy: 1 },
+        { dx: 0, dy: 1 },
+        { dx: -1, dy: 2 },
+        { dx: 0, dy: 2 }
+      );
+    } else if (dir === 1) {
+      // → 東：交叉點右方 2×2
+      offsets.push(
+        { dx: 1, dy: 0 },
+        { dx: 1, dy: 1 },
+        { dx: 2, dy: 0 },
+        { dx: 2, dy: 1 }
+      );
+    } else {
+      // 3 ← 西：交叉點左方 2×2
+      offsets.push(
+        { dx: -1, dy: 0 },
+        { dx: -1, dy: -1 },
+        { dx: -2, dy: 0 },
+        { dx: -2, dy: -1 }
+      );
+    }
 
     const set = new Set();
-    for (const base of BASE_FOV_OFFSETS_SOUTH) {
-      const r = rotateOffsetCCW(base.dx, base.dy, stepsFromSouth);
-      const x = ix + r.dx;
-      const y = iy + r.dy;
+    for (const o of offsets) {
+      const x = ix + o.dx;
+      const y = iy + o.dy;
       if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) continue;
       set.add(x + "," + y);
     }
