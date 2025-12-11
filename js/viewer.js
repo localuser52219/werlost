@@ -1,6 +1,9 @@
 // js/viewer.js
-// 迷路追蹤器 觀眾端 Viewer
-// 使用 Supabase rooms / players + shopName.js 的 generateMap / getShopName / isWall
+// 迷路追蹤器 觀眾端 Viewer（修正版）
+// 主要改動：
+// 1. Supabase 查詢改用 .select("*")，避免未知欄位造成 400 Bad Request
+// 2. 終點改為：由 seed + room 唯一抽出一個店舖位置，並在地圖以 ★ 顯示
+// 3. 終點店名由 getShopName(seed, goalX, goalY) 產生，無須 DB 欄位
 
 (function () {
   const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
@@ -8,10 +11,11 @@
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qcnN5dWx1b3pqZ3hndWNsZWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDQ3OTEsImV4cCI6MjA3ODY4MDc5MX0.Y7tGY-s6iNdSq7D46sf4dVJh6qKDuTYrXWgX-NJGG_4";
 
   const MAX_VIEW_SIZE = 25;
-  const NEAR_SHOP_RADIUS = 2; // 「周圍四個格」→ 半徑 2，曼哈頓距離 1~2
+  const NEAR_SHOP_RADIUS = 2; // 玩家周圍四格 → 曼哈頓距離 1~2
   const POLL_INTERVAL_MS = 1000;
   const FOV_RANGE = 4; // 視野距離
 
+  // ---------- 基礎檢查 ----------
   if (!window.supabase) {
     console.error("[viewer] Supabase CDN 未載入");
     return;
@@ -38,6 +42,27 @@
         console.log("[viewer]", message, extra || "");
       }
     } catch (_) {}
+  }
+
+  // hash 工具：優先用 shopName.js 提供的 hashToInt，否則用本地版本
+  function hashToIntSafe(str) {
+    if (typeof window.hashToInt === "function") {
+      return window.hashToInt(str);
+    }
+    let h = 0;
+    for (let i = 0; i < str.length; i++) {
+      h = (h * 31 + str.charCodeAt(i)) >>> 0;
+    }
+    return h;
+  }
+
+  // 由 seed + room.id 決定一個終點座標（確保 deterministic）
+  function computeGoal(seed, mapSize, roomId) {
+    const baseSeed = seed || String(roomId) || "default-seed";
+    const h = hashToIntSafe(baseSeed + ":goal");
+    const x = h % mapSize;
+    const y = Math.floor(h / mapSize) % mapSize;
+    return { x, y };
   }
 
   document.addEventListener("DOMContentLoaded", function () {
@@ -92,6 +117,7 @@
       return;
     }
 
+    // 相容舊 ?code=
     if (roomFromCode && !roomFromRoom) {
       try {
         const url = new URL(window.location.href);
@@ -117,15 +143,16 @@
     let lastMapSize = null;
     let lastMap = null;
 
+    // ---------- 1. 讀取 rooms / players ----------
     async function fetchAndRender(code) {
       if (isFetching) return;
       isFetching = true;
 
       try {
-        // rooms
+        // rooms：用 * 避免因欄位名稱不符導致 400
         const { data: room, error: roomError } = await supabase
           .from("rooms")
-          .select("id, code, seed, map_size, goal_shop, goal_x, goal_y")
+          .select("*")
           .eq("code", code)
           .maybeSingle();
 
@@ -141,10 +168,10 @@
           return;
         }
 
-        // players
+        // players：同樣用 *
         const { data: players, error: playersError } = await supabase
           .from("players")
-          .select("id, room_id, role, x, y, direction")
+          .select("*")
           .eq("room_id", room.id);
 
         if (playersError) {
@@ -160,10 +187,11 @@
           players?.find((p) => String(p.role).toUpperCase() === "B") || null;
 
         const seed = room.seed || String(room.id) || "default-seed";
-        const mapSize =
+        const mapSizeRaw =
           typeof room.map_size === "number" && room.map_size > 0
             ? room.map_size
-            : MAX_VIEW_SIZE;
+            : null;
+        const mapSize = mapSizeRaw || MAX_VIEW_SIZE;
 
         if (
           !lastMap ||
@@ -183,6 +211,23 @@
           }
         }
 
+        // 終點：若 DB 沒有 goal_x / goal_y，就用 computeGoal 決定
+        let destX =
+          typeof room.goal_x === "number" ? room.goal_x : undefined;
+        let destY =
+          typeof room.goal_y === "number" ? room.goal_y : undefined;
+
+        if (
+          typeof destX !== "number" ||
+          typeof destY !== "number" ||
+          isNaN(destX) ||
+          isNaN(destY)
+        ) {
+          const goal = computeGoal(seed, mapSize, room.id);
+          destX = goal.x;
+          destY = goal.y;
+        }
+
         renderState({
           room,
           seed,
@@ -190,6 +235,8 @@
           map: lastMap,
           playerA,
           playerB,
+          destX,
+          destY,
         });
         showError("");
       } catch (e) {
@@ -200,10 +247,12 @@
       }
     }
 
+    // ---------- 2. 更新畫面 ----------
     function renderState(state) {
-      const { room, seed, mapSize, map, playerA, playerB } = state;
+      const { room, seed, mapSize, map, playerA, playerB, destX, destY } =
+        state;
 
-      // 玩家文字
+      // 2A. 玩家文字狀態
       if (playerAStatusEl) {
         if (
           playerA &&
@@ -232,9 +281,7 @@
         }
       }
 
-      // 終點
-      const destX = room.goal_x;
-      const destY = room.goal_y;
+      // 2B. 終點店名（由 getShopName 生成）
       let goalName = "";
       if (
         typeof destX === "number" &&
@@ -286,22 +333,75 @@
         }
       }
 
-      // 附近店舖列表（以虛擬店舖生成）
-      updateNearbyShops(seed, map, mapSize, playerA, playerAShopsEl, "A");
-      updateNearbyShops(seed, map, mapSize, playerB, playerBShopsEl, "B");
+      // 2C. 玩家附近店舖列表
+      updateNearbyShops(
+        seed,
+        map,
+        mapSize,
+        playerA,
+        playerAShopsEl,
+        "A"
+      );
+      updateNearbyShops(
+        seed,
+        map,
+        mapSize,
+        playerB,
+        playerBShopsEl,
+        "B"
+      );
 
-      // 地圖顯示
+      // 2D. 地圖顯示
       renderMap(seed, map, mapSize, playerA, playerB, destX, destY);
     }
 
     function formatDirection(dir) {
-      // 假設 direction: 0 上, 1 右, 2 下, 3 左
       const d = Number.isInteger(dir) ? dir : null;
       if (d === 0) return "↑";
       if (d === 1) return "→";
       if (d === 2) return "↓";
       if (d === 3) return "←";
       return "未知";
+    }
+
+    function arrowForDirection(dir) {
+      const d = Number.isInteger(dir) ? dir : null;
+      if (d === 0) return "↑";
+      if (d === 1) return "→";
+      if (d === 2) return "↓";
+      if (d === 3) return "←";
+      return "●";
+    }
+
+    function inFov(player, x, y) {
+      if (
+        !player ||
+        typeof player.x !== "number" ||
+        typeof player.y !== "number"
+      )
+        return false;
+
+      const dx = x - player.x;
+      const dy = y - player.y;
+      const dist = Math.abs(dx) + Math.abs(dy);
+      if (dist === 0 || dist > FOV_RANGE) return false;
+
+      const dir = Number.isInteger(player.direction) ? player.direction : -1;
+
+      if (dir === 0) {
+        if (dy <= 0) return false;
+        return Math.abs(dx) <= dy;
+      } else if (dir === 2) {
+        if (dy >= 0) return false;
+        return Math.abs(dx) <= -dy;
+      } else if (dir === 1) {
+        if (dx <= 0) return false;
+        return Math.abs(dy) <= dx;
+      } else if (dir === 3) {
+        if (dx >= 0) return false;
+        return Math.abs(dy) <= -dx;
+      }
+      return false;
     }
 
     function updateNearbyShops(seed, map, mapSize, player, listEl, label) {
@@ -371,7 +471,7 @@
         return;
       }
 
-      const MAX_LIST = 4; // 「周圍四個格」→ 顯示最多 4 間
+      const MAX_LIST = 4;
       shops.slice(0, MAX_LIST).forEach((s) => {
         const li = document.createElement("li");
         li.textContent = `${s.name}（${s.x}, ${s.y}，距離 ${s.dist}）`;
@@ -469,7 +569,7 @@
           if (isB) cell.classList.add("map-cell--player-b");
           if (isGoal) cell.classList.add("map-cell--goal");
 
-          // 視野標示（以玩家 A 為主）
+          // 視野：以玩家 A 為主
           if (playerA && inFov(playerA, x, y)) {
             cell.classList.add("map-cell--fov");
           }
@@ -479,54 +579,7 @@
       }
     }
 
-    function arrowForDirection(dir) {
-      const d = Number.isInteger(dir) ? dir : null;
-      if (d === 0) return "↑";
-      if (d === 1) return "→";
-      if (d === 2) return "↓";
-      if (d === 3) return "←";
-      return "●";
-    }
-
-    function inFov(player, x, y) {
-      // 視野簡化：以玩家為中心，距離 <= FOV_RANGE，且在面向方向前方扇形
-      if (
-        !player ||
-        typeof player.x !== "number" ||
-        typeof player.y !== "number"
-      )
-        return false;
-
-      const dx = x - player.x;
-      const dy = y - player.y;
-      const dist = Math.abs(dx) + Math.abs(dy);
-      if (dist === 0 || dist > FOV_RANGE) return false;
-
-      const dir = Number.isInteger(player.direction) ? player.direction : -1;
-
-      // 假設座標 y 增加向上或向下，這裏只做相對方向，不管實際「北/南」語義
-      if (dir === 0) {
-        // 上：優先 y+
-        if (dy <= 0) return false;
-        return Math.abs(dx) <= dy;
-      } else if (dir === 2) {
-        // 下：優先 y-
-        if (dy >= 0) return false;
-        return Math.abs(dx) <= -dy;
-      } else if (dir === 1) {
-        // 右：優先 x+
-        if (dx <= 0) return false;
-        return Math.abs(dy) <= dx;
-      } else if (dir === 3) {
-        // 左：優先 x-
-        if (dx >= 0) return false;
-        return Math.abs(dy) <= -dx;
-      }
-
-      return false;
-    }
-
-    // 啟動輪詢
+    // ---------- 3. 啟動輪詢 ----------
     fetchAndRender(roomCode);
     pollTimer = window.setInterval(function () {
       fetchAndRender(roomCode);
