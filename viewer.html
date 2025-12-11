@@ -146,6 +146,7 @@
       background-color: #050814;
       border: 1px solid rgba(255, 255, 255, 0.10);
       padding: 0; /* 沒有 padding，格線與交叉點對齊 overlay 百分比 */
+      z-index: 0;
     }
 
     .map-cell {
@@ -158,6 +159,27 @@
       justify-content: center;
       font-size: 0.75rem;
       overflow: hidden;
+    }
+
+    .map-cluster-labels {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    .map-cluster-label {
+      position: absolute;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      font-size: clamp(0.8rem, 1vw + 0.6rem, 1.2rem);
+      font-weight: 800;
+      color: rgba(255, 255, 255, 0.95);
+      text-shadow: 0 0 8px rgba(0, 0, 0, 0.8);
+      opacity: 0.88;
+      padding: 4px;
     }
 
     /* 群集底色（道路） */
@@ -195,6 +217,7 @@
       position: absolute;
       inset: 0;
       pointer-events: none;
+      z-index: 2;
     }
 
     .player-dot {
@@ -295,6 +318,7 @@
             <div class="panel-body">
               <div class="map-wrapper">
                 <div id="map-grid" class="map-grid"></div>
+                <div id="map-labels" class="map-cluster-labels"></div>
                 <div id="player-layer" class="map-player-layer"></div>
               </div>
               <div style="margin-top: 6px; font-size: 0.78rem; opacity: 0.85;">
@@ -345,8 +369,8 @@
     </footer>
   </div>
 
-  <!-- Supabase CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase CDN（使用 UMD 版本以提供 window.supabase ） -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
   <!-- 店舖 / 地圖生成工具：提供 generateMap / getShopName / isWall / hashToInt -->
   <script src="js/shopName.js"></script>
   <!-- 觀眾端主程式 -->

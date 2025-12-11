@@ -6,6 +6,8 @@
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qcnN5dWx1b3pqZ3hndWNsZWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDQ3OTEsImV4cCI6MjA3ODY4MDc5MX0.Y7tGY-s6iNdSq7D46sf4dVJh6qKDuTYrXWgX-NJGG_4";
 
+  let supabaseClient = null;
+
   // 玩家附近店舖：上、下、左、右四格
   const NEAR_OFFSETS = [
     { dx: 0, dy: 1 },
@@ -14,16 +16,10 @@
     { dx: 1, dy: 0 }
   ];
 
-  const POLL_INTERVAL_MS = 1000;
+  const CLUSTER_BLOCK_SIZE = 5;
 
-  if (!window.supabase) {
-    console.error("[viewer] Supabase CDN 未載入");
-    return;
-  }
-  const supabase = window.supabase.createClient(
-    SUPABASE_URL,
-    SUPABASE_ANON_KEY
-  );
+  const POLL_INTERVAL_MS = 1000;
+  const REALTIME_CHANNEL_PREFIX = "viewer_room_";
 
   if (
     typeof window.generateMap !== "function" ||
@@ -65,6 +61,16 @@
     return g % 6; // 0..5 → 六個群集
   }
 
+  function getClusterTypeLabel(seed, x, y) {
+    if (typeof window.getShopTypeName === "function") {
+      return window.getShopTypeName(seed, x, y);
+    }
+    if (typeof window.getShopName === "function") {
+      return window.getShopName(seed, x, y);
+    }
+    return "";
+  }
+
   // 終點：由 seed + room.id 決定（除非 DB 已有 goal_x/goal_y）
   function computeGoal(seed, mapSize, roomId) {
     const baseSeed = seed || String(roomId) || "default-seed";
@@ -103,29 +109,29 @@
 
     const offsets = [];
 
-    if (dir === 2) {
-      // ↓ 南：交叉點下方 2×2
-      offsets.push(
-        { dx: 0, dy: -1 },
-        { dx: -1, dy: -1 },
-        { dx: 0, dy: -2 },
-        { dx: -1, dy: -2 }
-      );
-    } else if (dir === 0) {
+    if (dir === 0) {
       // ↑ 北：交叉點上方 2×2
       offsets.push(
-        { dx: -1, dy: 1 },
-        { dx: 0, dy: 1 },
-        { dx: -1, dy: 2 },
-        { dx: 0, dy: 2 }
+        { dx: -1, dy: -1 },
+        { dx: 0, dy: -1 },
+        { dx: -1, dy: -2 },
+        { dx: 0, dy: -2 }
       );
     } else if (dir === 1) {
       // → 東：交叉點右方 2×2
       offsets.push(
         { dx: 1, dy: 0 },
-        { dx: 1, dy: 1 },
+        { dx: 1, dy: -1 },
         { dx: 2, dy: 0 },
-        { dx: 2, dy: 1 }
+        { dx: 2, dy: -1 }
+      );
+    } else if (dir === 2) {
+      // ↓ 南：交叉點下方 2×2
+      offsets.push(
+        { dx: 0, dy: 0 },
+        { dx: -1, dy: 0 },
+        { dx: 0, dy: 1 },
+        { dx: -1, dy: 1 }
       );
     } else {
       // 3 ← 西：交叉點左方 2×2
@@ -175,6 +181,7 @@
     const mainEl = document.getElementById("viewer-main");
     const roomCodeEl = document.getElementById("room-code");
     const mapGridEl = document.getElementById("map-grid");
+    const mapLabelLayerEl = document.getElementById("map-labels");
     const playerLayerEl = document.getElementById("player-layer");
 
     const playerAStatusEl = document.getElementById("player-a-status");
@@ -213,6 +220,18 @@
 
     ensureDefaultText();
 
+    if (!window.supabase) {
+      console.error("[viewer] Supabase CDN 未載入");
+      hideMain();
+      showError("無法載入資料服務，請確認網路或稍後再試。");
+      return;
+    }
+
+    supabaseClient = window.supabase.createClient(
+      SUPABASE_URL,
+      SUPABASE_ANON_KEY
+    );
+
     if (!roomCode) {
       showError("URL 缺少 ?room= 房間代碼");
       hideMain();
@@ -239,6 +258,8 @@
 
     let isFetching = false;
     let pollTimer = null;
+    let realtimeChannel = null;
+    let realtimeChannelName = null;
     let lastRoomId = null;
     let lastSeed = null;
     let lastMapSize = null;
@@ -249,7 +270,7 @@
       isFetching = true;
 
       try {
-        const { data: room, error: roomError } = await supabase
+        const { data: room, error: roomError } = await supabaseClient
           .from("rooms")
           .select("*")
           .eq("code", code)
@@ -267,7 +288,7 @@
           return;
         }
 
-        const { data: players, error: playersError } = await supabase
+        const { data: players, error: playersError } = await supabaseClient
           .from("players")
           .select("*")
           .eq("room_id", room.id);
@@ -308,6 +329,8 @@
           }
         }
 
+        ensureRealtimeSubscription(room.id, code);
+
         let destX =
           typeof room.goal_x === "number" ? room.goal_x : undefined;
         let destY =
@@ -340,6 +363,59 @@
       } finally {
         isFetching = false;
       }
+    }
+
+    function ensureRealtimeSubscription(roomId, roomCodeValue) {
+      if (!supabaseClient || !roomId) return;
+
+      const channelName = REALTIME_CHANNEL_PREFIX + roomId;
+      if (realtimeChannel && realtimeChannelName === channelName) {
+        return;
+      }
+
+      if (realtimeChannel) {
+        try {
+          supabaseClient.removeChannel(realtimeChannel);
+        } catch (e) {
+          logDebug("Failed to remove previous realtime channel", e);
+        }
+      }
+
+      realtimeChannel = supabaseClient
+        .channel(channelName)
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "players",
+            filter: `room_id=eq.${roomId}`
+          },
+          () => {
+            logDebug("Realtime players change detected, refreshing", roomId);
+            fetchAndRender(roomCodeValue);
+          }
+        )
+        .on(
+          "postgres_changes",
+          {
+            event: "UPDATE",
+            schema: "public",
+            table: "rooms",
+            filter: `id=eq.${roomId}`
+          },
+          () => {
+            logDebug("Realtime room update detected, refreshing", roomId);
+            fetchAndRender(roomCodeValue);
+          }
+        )
+        .subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            logDebug("Realtime channel subscribed", channelName);
+          }
+        });
+
+      realtimeChannelName = channelName;
     }
 
     function renderState(state) {
@@ -507,8 +583,9 @@
       destY,
       fovSet
     ) {
-      if (!mapGridEl || !playerLayerEl) return;
+      if (!mapGridEl || !playerLayerEl || !mapLabelLayerEl) return;
       mapGridEl.innerHTML = "";
+      mapLabelLayerEl.innerHTML = "";
       playerLayerEl.innerHTML = "";
 
       if (!map || !Array.isArray(map) || !map[0]) {
@@ -525,7 +602,7 @@
 
       const hasIsWall = typeof window.isWall === "function";
 
-      for (let y = mapSize - 1; y >= 0; y--) {
+      for (let y = 0; y < mapSize; y++) {
         for (let x = 0; x < mapSize; x++) {
           const cell = document.createElement("div");
           cell.className = "map-cell";
@@ -560,18 +637,59 @@
         }
       }
 
+      const blocksX = Math.ceil(mapSize / CLUSTER_BLOCK_SIZE);
+      const blocksY = Math.ceil(mapSize / CLUSTER_BLOCK_SIZE);
+
+      for (let cy = 0; cy < blocksY; cy++) {
+        for (let cx = 0; cx < blocksX; cx++) {
+          const x0 = cx * CLUSTER_BLOCK_SIZE;
+          const y0 = cy * CLUSTER_BLOCK_SIZE;
+
+          if (x0 >= mapSize || y0 >= mapSize) continue;
+
+          const blockWidth = Math.min(CLUSTER_BLOCK_SIZE, mapSize - x0);
+          const blockHeight = Math.min(CLUSTER_BLOCK_SIZE, mapSize - y0);
+
+          const labelText = getClusterTypeLabel(seed, x0, y0);
+          if (!labelText) continue;
+
+          const label = document.createElement("div");
+          label.className = "map-cluster-label";
+          label.textContent = labelText;
+
+          label.style.left = ((x0 / mapSize) * 100).toFixed(4) + "%";
+          label.style.top = ((y0 / mapSize) * 100).toFixed(4) + "%";
+          label.style.width = ((blockWidth / mapSize) * 100).toFixed(4) + "%";
+          label.style.height = ((blockHeight / mapSize) * 100).toFixed(4) + "%";
+
+          mapLabelLayerEl.appendChild(label);
+        }
+      }
+
       // 玩家圓點：畫在交叉點（格線交叉處）
       function drawPlayerDot(pos, player, cls) {
         if (pos.ix === null || pos.iy === null) return;
+
         const dot = document.createElement("div");
         dot.className = "player-dot " + cls;
 
-        // 左下角 (0,0)，右上角 (mapSize, mapSize)
-        const leftPercent = (pos.ix / mapSize) * 100;
-        const topPercent = ((mapSize - pos.iy) / mapSize) * 100;
+        const gridStyle = window.getComputedStyle(mapGridEl);
+        const gapX = parseFloat(gridStyle.columnGap) || 0;
+        const gapY = parseFloat(gridStyle.rowGap) || 0;
 
-        dot.style.left = leftPercent + "%";
-        dot.style.top = topPercent + "%";
+        const gridWidth = mapGridEl.clientWidth;
+        const gridHeight = mapGridEl.clientHeight;
+
+        if (mapSize <= 0 || gridWidth === 0 || gridHeight === 0) return;
+
+        const cellWidth = (gridWidth - (mapSize - 1) * gapX) / mapSize;
+        const cellHeight = (gridHeight - (mapSize - 1) * gapY) / mapSize;
+
+        const leftPx = pos.ix * cellWidth + Math.max(0, pos.ix - 1) * gapX;
+        const topPx = pos.iy * cellHeight + Math.max(0, pos.iy - 1) * gapY;
+
+        dot.style.left = leftPx + "px";
+        dot.style.top = topPx + "px";
         dot.textContent = arrowForDirection(player?.direction);
         playerLayerEl.appendChild(dot);
       }
@@ -589,6 +707,13 @@
     window.addEventListener("beforeunload", function () {
       if (pollTimer) {
         clearInterval(pollTimer);
+      }
+      if (realtimeChannel) {
+        try {
+          supabaseClient.removeChannel(realtimeChannel);
+        } catch (_) {}
+        realtimeChannel = null;
+        realtimeChannelName = null;
       }
     });
   });

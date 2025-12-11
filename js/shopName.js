@@ -59,6 +59,15 @@ function getShopName(seed, x, y) {
   return PREFIX_LIST[p] + TYPE_LIST[idx] + SUFFIX_LIST[s];
 }
 
+function getShopTypeName(seed, x, y) {
+  const block = 5;
+  const cx = Math.floor(x / block);
+  const cy = Math.floor(y / block);
+  const groupSeed = hashToInt(seed + ':cluster:' + cx + ':' + cy);
+  const dominant = groupSeed % TYPE_LIST.length;
+  return TYPE_LIST[dominant];
+}
+
 // 軟牆生成與無封死迷宮
 function generateMap(seed, size) {
   const map = Array.from({ length: size }, () =>
@@ -95,6 +104,7 @@ function isWall(map, x, y) {
 }
 
 window.getShopName = getShopName;
+window.getShopTypeName = getShopTypeName;
 window.generateMap = generateMap;
 window.isWall = isWall;
 window.hashToInt = hashToInt;
