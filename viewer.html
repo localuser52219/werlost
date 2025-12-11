@@ -5,7 +5,7 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- 不再載入 /css/viewer.css，以免 404；全部樣式集中於此 -->
+  <!-- 不載入 /css/viewer.css，避免 404；樣式集中於此 -->
   <style>
     body {
       margin: 0;
@@ -131,7 +131,7 @@
     .map-wrapper {
       position: relative;
       width: 100%;
-      max-width: 520px;
+      max-width: 520px; /* 地圖尺寸可在此調整 */
       margin: 0 auto;
       aspect-ratio: 1 / 1;
     }
@@ -140,12 +140,12 @@
       position: absolute;
       inset: 0;
       display: grid;
-      grid-template-columns: repeat(9, 1fr); /* 會由 JS 覆寫成 map_size */
-      gap: 0; /* 用背景線做格線 */
+      grid-template-columns: repeat(9, 1fr); /* 會由 JS 改為 map_size */
+      gap: 2px;
       border-radius: 10px;
-      padding: 4px;
       background-color: #050814;
       border: 1px solid rgba(255, 255, 255, 0.10);
+      padding: 0; /* 沒有 padding，格線與交叉點對齊 overlay 百分比 */
     }
 
     .map-cell {
@@ -175,7 +175,7 @@
 
     .map-cell-label {
       z-index: 1;
-      opacity: 0.9;
+      opacity: 0.95;
     }
 
     .map-cell--goal {
@@ -189,7 +189,7 @@
       box-shadow: 0 0 0 2px rgba(80, 200, 255, 0.85) inset;
     }
 
-    /* 玩家 overlay：交叉點圓點 + 箭嘴文字 */
+    /* 玩家 overlay：交叉點圓點 + 箭嘴 */
 
     .map-player-layer {
       position: absolute;
@@ -262,19 +262,6 @@
       border: 2px solid rgba(80, 200, 255, 0.8);
     }
 
-    .status-list,
-    .shops-list {
-      list-style: none;
-      padding-left: 0;
-      margin: 4px 0 0;
-      font-size: 0.85rem;
-    }
-
-    .status-list li,
-    .shops-list li {
-      margin-bottom: 2px;
-    }
-
     footer {
       padding: 8px 16px 14px;
       font-size: 0.75rem;
@@ -303,12 +290,15 @@
           <section class="panel">
             <div class="panel-header">
               <div class="panel-title">地圖</div>
-              <div class="panel-tag">全圖（格線 = 道路交叉點）</div>
+              <div class="panel-tag">全圖（格線交叉點 = 玩家座標）</div>
             </div>
             <div class="panel-body">
               <div class="map-wrapper">
                 <div id="map-grid" class="map-grid"></div>
                 <div id="player-layer" class="map-player-layer"></div>
+              </div>
+              <div style="margin-top: 6px; font-size: 0.78rem; opacity: 0.85;">
+                顏色區塊表示店舖群集（集中生成區域），藍框為玩家視野。
               </div>
               <div class="legend">
                 <div class="legend-item">
@@ -321,7 +311,7 @@
                   <span class="legend-color legend-goal"></span><span>終點 ★</span>
                 </div>
                 <div class="legend-item">
-                  <span class="legend-color legend-fov"></span><span>玩家 A 視野（前方 2×2 格）</span>
+                  <span class="legend-color legend-fov"></span><span>視野格（玩家 A + B）</span>
                 </div>
               </div>
             </div>
