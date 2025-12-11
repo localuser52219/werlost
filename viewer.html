@@ -5,8 +5,7 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <link rel="stylesheet" href="/css/viewer.css" />
-
+  <!-- 不再載入 /css/viewer.css，以免 404；全部樣式在此檔內 -->
   <style>
     body {
       margin: 0;
@@ -97,7 +96,7 @@
     .panel {
       border-radius: 12px;
       padding: 14px 16px;
-      background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.12), rgba(8, 12, 26, 0.95));
+      background: radial-gradient(circle at top left, rgba(255, 255, 255, 0.10), rgba(8, 12, 26, 0.96));
       border: 1px solid rgba(255, 255, 255, 0.08);
       box-shadow: 0 16px 30px rgba(0, 0, 0, 0.4);
     }
@@ -129,13 +128,13 @@
 
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(9, 1fr);
-      gap: 2px;
+      grid-template-columns: repeat(9, 1fr); /* 會被 JS 覆寫成 viewSize */
+      gap: 3px;
       margin-top: 8px;
-      border-radius: 8px;
-      padding: 6px;
+      border-radius: 10px;
+      padding: 8px;
       background: #050814;
-      border: 1px solid rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.10);
       min-height: 120px;
     }
 
@@ -147,42 +146,50 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 0.75rem;
+      font-size: 0.78rem;
+      overflow: hidden;
     }
+
+    /* 群集底色（只用於道路） */
+    .map-cell--cluster-0 { background: rgba(78, 99, 150, 0.55); }
+    .map-cell--cluster-1 { background: rgba(88, 140, 110, 0.55); }
+    .map-cell--cluster-2 { background: rgba(140, 104, 78, 0.55); }
+    .map-cell--cluster-3 { background: rgba(120, 92, 150, 0.55); }
+    .map-cell--cluster-4 { background: rgba(96, 120, 96, 0.55); }
+    .map-cell--cluster-5 { background: rgba(120, 120, 92, 0.55); }
 
     .map-cell--wall {
-      background: rgba(0, 0, 0, 0.75);
-    }
-
-    .map-cell--fov {
-      box-shadow: 0 0 0 2px rgba(80, 200, 255, 0.45) inset;
+      background: #050509;
+      border: 1px solid rgba(255, 255, 255, 0.35);
     }
 
     .map-cell-label {
       z-index: 1;
     }
 
-    .map-cell-coord {
-      position: absolute;
-      bottom: 2px;
-      right: 4px;
-      font-size: 0.55rem;
-      opacity: 0.5;
-    }
-
     .map-cell--player-a {
-      background: rgba(80, 200, 255, 0.8);
-      font-weight: 600;
+      background: rgba(80, 200, 255, 0.9);
+      color: #021018;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.7);
     }
 
     .map-cell--player-b {
-      background: rgba(255, 150, 70, 0.8);
-      font-weight: 600;
+      background: rgba(255, 170, 90, 0.9);
+      color: #1b0d02;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.7);
     }
 
     .map-cell--goal {
-      background: rgba(255, 230, 120, 0.9);
-      font-weight: 700;
+      background: rgba(255, 230, 120, 0.95);
+      color: #241c00;
+      font-weight: 800;
+      border: 1px solid rgba(255, 255, 255, 0.9);
+    }
+
+    .map-cell--fov {
+      box-shadow: 0 0 0 2px rgba(80, 200, 255, 0.8) inset;
     }
 
     .legend {
@@ -249,7 +256,7 @@
   <div class="viewer-wrapper">
     <header>
       <h1>迷路追蹤器 觀眾端 Viewer</h1>
-      <div class="subtitle">顯示玩家位置、面向、視野、附近店舖與終點</div>
+      <div class="subtitle">顯示玩家交叉點位置、面向、視野、附近店舖與終點</div>
     </header>
 
     <main>
@@ -265,13 +272,13 @@
           <section class="panel">
             <div class="panel-header">
               <div class="panel-title">地圖</div>
-              <div class="panel-tag">Map View（以玩家 A 為中心）</div>
+              <div class="panel-tag">Map View（以玩家 A 交叉點為中心縮放）</div>
             </div>
             <div class="panel-body">
               <div id="map-grid" class="map-grid"></div>
               <div class="legend">
                 <div class="legend-item">
-                  <span class="legend-color legend-player-a"></span><span>玩家 A</span>
+                  <span class="legend-color legend-player-a"></span><span>玩家 A（箭嘴 = 面向）</span>
                 </div>
                 <div class="legend-item">
                   <span class="legend-color legend-player-b"></span><span>玩家 B</span>
@@ -280,7 +287,7 @@
                   <span class="legend-color legend-goal"></span><span>終點 ★</span>
                 </div>
                 <div class="legend-item">
-                  <span class="legend-color legend-fov"></span><span>玩家視野</span>
+                  <span class="legend-color legend-fov"></span><span>玩家 A 視野（前方 2×2）</span>
                 </div>
               </div>
             </div>
@@ -316,7 +323,7 @@
 
   <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- 店舖 / 地圖生成工具：提供 generateMap / getShopName / isWall -->
+  <!-- 店舖 / 地圖生成工具：提供 generateMap / getShopName / isWall / hashToInt -->
   <script src="js/shopName.js"></script>
   <!-- 觀眾端主程式 -->
   <script src="js/viewer.js"></script>
