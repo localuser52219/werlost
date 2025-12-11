@@ -1,15 +1,12 @@
 // js/viewer.js
-// 迷路追蹤器 觀眾端 Viewer（對齊交叉點模型與 2×2 視野）
+// 迷路追蹤器 觀眾端 Viewer（交叉點 + 2×2 視野 + 全圖 + 群集文字）
 
 (function () {
   const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
   const SUPABASE_ANON_KEY =
     "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im5qcnN5dWx1b3pqZ3hndWNsZWNpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjMxMDQ3OTEsImV4cCI6MjA3ODY4MDc5MX0.Y7tGY-s6iNdSq7D46sf4dVJh6qKDuTYrXWgX-NJGG_4";
 
-  // 顯示視窗大小（格數）：玩家 A 為中心，最大顯示 13×13
-  const MAX_VIEW_SIZE = 13;
-
-  // 玩家附近店舖：只取上、下、左、右四格
+  // 玩家附近店舖：上、下、左、右四格
   const NEAR_OFFSETS = [
     { dx: 0, dy: 1 },
     { dx: 0, dy: -1 },
@@ -18,8 +15,6 @@
   ];
 
   const POLL_INTERVAL_MS = 1000;
-
-  const FOV_RANGE = 2; // 只用來過濾交叉點視野格的距離（實際 2×2 已由公式決定）
 
   if (!window.supabase) {
     console.error("[viewer] Supabase CDN 未載入");
@@ -49,7 +44,7 @@
     } catch (_) {}
   }
 
-  // 優先使用 shopName.js 的 hashToInt
+  // hash：優先用 shopName.js 的 hashToInt
   function hashToIntSafe(str) {
     if (typeof window.hashToInt === "function") {
       return window.hashToInt(str);
@@ -61,16 +56,21 @@
     return h;
   }
 
-  // 以 5×5 block 作群集，壓成 0..5 六類顏色
+  // 群集 ID：每 5×5 一個 cluster
   function getClusterId(seed, x, y) {
     const block = 5;
     const cx = Math.floor(x / block);
     const cy = Math.floor(y / block);
     const g = hashToIntSafe(seed + ":cluster:" + cx + ":" + cy);
-    return g % 6;
+    return g % 6; // 0..5 → 六個群集
   }
 
-  // 由 seed + room.id 決定一個終點座標（deterministic）
+  function clusterLabel(id) {
+    const labels = ["A", "B", "C", "D", "E", "F"];
+    return labels[id] || "?";
+  }
+
+  // 終點：由 seed + room.id 決定（除非 DB 已有 goal_x/goal_y）
   function computeGoal(seed, mapSize, roomId) {
     const baseSeed = seed || String(roomId) || "default-seed";
     const h = hashToIntSafe(baseSeed + ":goal");
@@ -79,7 +79,7 @@
     return { x, y };
   }
 
-  // 從 players 列中取得交叉點座標
+  // 從 players 列中拿交叉點座標（ix/iy 優先，否則 x/y）
   function getPlayerIntersection(p) {
     if (!p) return { ix: null, iy: null };
     const ix =
@@ -97,42 +97,42 @@
     return { ix, iy };
   }
 
-  // 與 player.js 相同的視野公式：交叉點 (ix,iy) → 前方左右 2×2 cell
+  // 與玩家端一致：從交叉點計算前方 2×2 視野格
   // dir: 0=北,1=東,2=南,3=西
   function getFovCells(ix, iy, dir) {
     if (ix === null || iy === null) return null;
 
     if (dir === 0) {
-      // 北：上方兩格列
+      // 北：上方兩列（視為 y+ 方向）
       return {
-        leftNear: { x: ix - 1, y: iy - 1 },
-        rightNear: { x: ix, y: iy - 1 },
-        leftFar: { x: ix - 1, y: iy - 2 },
-        rightFar: { x: ix, y: iy - 2 }
+        leftNear: { x: ix - 1, y: iy + 1 },
+        rightNear: { x: ix, y: iy + 1 },
+        leftFar: { x: ix - 1, y: iy + 2 },
+        rightFar: { x: ix, y: iy + 2 }
       };
     } else if (dir === 1) {
-      // 東：右邊兩格列
+      // 東：右邊兩列
       return {
-        leftNear: { x: ix, y: iy - 1 }, // 左 = 北
-        rightNear: { x: ix, y: iy }, // 右 = 南
-        leftFar: { x: ix + 1, y: iy - 1 },
-        rightFar: { x: ix + 1, y: iy }
+        leftNear: { x: ix + 1, y: iy + 1 }, // 右上
+        rightNear: { x: ix + 1, y: iy }, // 右下
+        leftFar: { x: ix + 2, y: iy + 1 },
+        rightFar: { x: ix + 2, y: iy }
       };
     } else if (dir === 2) {
-      // 南：下方兩格列
+      // 南：下方兩列（視為 y- 方向）
       return {
-        leftNear: { x: ix, y: iy }, // 左 = 東
-        rightNear: { x: ix - 1, y: iy }, // 右 = 西
-        leftFar: { x: ix, y: iy + 1 },
-        rightFar: { x: ix - 1, y: iy + 1 }
+        leftNear: { x: ix, y: iy - 1 },
+        rightNear: { x: ix - 1, y: iy - 1 },
+        leftFar: { x: ix, y: iy - 2 },
+        rightFar: { x: ix - 1, y: iy - 2 }
       };
     } else {
-      // 3 = 西：左邊兩格列
+      // 西：左邊兩列
       return {
-        leftNear: { x: ix - 1, y: iy }, // 左 = 南
-        rightNear: { x: ix - 1, y: iy - 1 }, // 右 = 北
+        leftNear: { x: ix - 1, y: iy },
+        rightNear: { x: ix - 1, y: iy + 1 },
         leftFar: { x: ix - 2, y: iy },
-        rightFar: { x: ix - 2, y: iy - 1 }
+        rightFar: { x: ix - 2, y: iy + 1 }
       };
     }
   }
@@ -154,9 +154,6 @@
         c.y >= mapSize
       )
         continue;
-      const dist =
-        Math.abs(c.x - (ix ?? 0)) + Math.abs(c.y - (iy ?? 0));
-      if (dist > FOV_RANGE + 2) continue; // 安全限制一下
       set.add(c.x + "," + c.y);
     }
     return set;
@@ -190,6 +187,7 @@
     const mainEl = document.getElementById("viewer-main");
     const roomCodeEl = document.getElementById("room-code");
     const mapGridEl = document.getElementById("map-grid");
+    const playerLayerEl = document.getElementById("player-layer");
 
     const playerAStatusEl = document.getElementById("player-a-status");
     const playerBStatusEl = document.getElementById("player-b-status");
@@ -302,7 +300,7 @@
         const mapSize =
           typeof room.map_size === "number" && room.map_size > 0
             ? room.map_size
-            : MAX_VIEW_SIZE;
+            : 25; // fallback
 
         if (
           !lastMap ||
@@ -322,7 +320,6 @@
           }
         }
 
-        // 終點：若 DB 無 goal_x / goal_y，則由 seed 抽一個
         let destX =
           typeof room.goal_x === "number" ? room.goal_x : undefined;
         let destY =
@@ -369,7 +366,6 @@
         destY
       } = state;
 
-      // 玩家文字：明確寫「交叉點 ix / iy」
       const posA = getPlayerIntersection(playerA);
       const posB = getPlayerIntersection(playerB);
 
@@ -393,7 +389,6 @@
         }
       }
 
-      // 終點店名
       let goalName = "";
       if (
         typeof destX === "number" &&
@@ -433,36 +428,11 @@
         }
       }
 
-      // 玩家附近四格店舖（正上、正下、正左、正右）
-      updateNearbyShops(
-        seed,
-        map,
-        mapSize,
-        posA,
-        playerAShopsEl
-      );
-      updateNearbyShops(
-        seed,
-        map,
-        mapSize,
-        posB,
-        playerBShopsEl
-      );
+      updateNearbyShops(seed, map, mapSize, posA, playerAShopsEl);
+      updateNearbyShops(seed, map, mapSize, posB, playerBShopsEl);
 
-      // 地圖（含群集顏色／視野／終點／玩家箭嘴）
       const fovSet = buildFovSet(playerA, mapSize);
-      renderMap(
-        seed,
-        map,
-        mapSize,
-        posA,
-        posB,
-        playerA,
-        playerB,
-        destX,
-        destY,
-        fovSet
-      );
+      renderMap(seed, map, mapSize, posA, posB, playerA, playerB, destX, destY, fovSet);
     }
 
     function updateNearbyShops(seed, map, mapSize, pos, listEl) {
@@ -535,8 +505,9 @@
       destY,
       fovSet
     ) {
-      if (!mapGridEl) return;
+      if (!mapGridEl || !playerLayerEl) return;
       mapGridEl.innerHTML = "";
+      playerLayerEl.innerHTML = "";
 
       if (!map || !Array.isArray(map) || !map[0]) {
         const warn = document.createElement("div");
@@ -547,64 +518,24 @@
         return;
       }
 
-      const viewSize = Math.min(mapSize, MAX_VIEW_SIZE);
+      // 全圖顯示
+      mapGridEl.style.gridTemplateColumns = `repeat(${mapSize}, 1fr)`;
 
-      // 以玩家 A 交叉點為中心（如果沒有 A，就用地圖中央）
-      let centerX;
-      let centerY;
-      if (posA.ix !== null && posA.iy !== null) {
-        centerX = posA.ix;
-        centerY = posA.iy;
-      } else {
-        centerX = Math.floor(mapSize / 2);
-        centerY = Math.floor(mapSize / 2);
-      }
-
-      const half = Math.floor(viewSize / 2);
-      let startX = centerX - half;
-      let startY = centerY - half;
-
-      if (startX < 0) startX = 0;
-      if (startY < 0) startY = 0;
-      if (startX + viewSize > mapSize) startX = mapSize - viewSize;
-      if (startY + viewSize > mapSize) startY = mapSize - viewSize;
-
-      mapGridEl.style.gridTemplateColumns = `repeat(${viewSize}, 1fr)`;
+      // 背景格線：map_size 等分
+      const step = 100 / mapSize;
+      mapGridEl.style.backgroundImage =
+        "linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px)," +
+        "linear-gradient(to top, rgba(255,255,255,0.15) 1px, transparent 1px)";
+      mapGridEl.style.backgroundSize = `${step}% ${step}%`;
 
       const hasIsWall = typeof window.isWall === "function";
 
-      // 將交叉點轉成「代表格子」來畫箭嘴，用簡化方式：就近貼在交叉點右上方格
-      function intersectionToCell(pos) {
-        if (pos.ix === null || pos.iy === null) return null;
-        let cx = pos.ix;
-        let cy = pos.iy - 1; // 右上 NE cell
-        if (cx < 0) cx = 0;
-        if (cx >= mapSize) cx = mapSize - 1;
-        if (cy < 0) cy = 0;
-        if (cy >= mapSize) cy = mapSize - 1;
-        return { x: cx, y: cy };
-      }
-
-      const cellA = intersectionToCell(posA);
-      const cellB = intersectionToCell(posB);
-
-      for (let y = startY + viewSize - 1; y >= startY; y--) {
-        for (let x = startX; x < startX + viewSize; x++) {
+      for (let y = mapSize - 1; y >= 0; y--) {
+        for (let x = 0; x < mapSize; x++) {
           const cell = document.createElement("div");
           cell.className = "map-cell";
 
           const isWallCell = hasIsWall ? window.isWall(map, x, y) : false;
-
-          const isA =
-            cellA &&
-            cellA.x === x &&
-            cellA.y === y;
-
-          const isB =
-            cellB &&
-            cellB.x === x &&
-            cellB.y === y;
-
           const isGoal =
             typeof destX === "number" &&
             typeof destY === "number" &&
@@ -612,45 +543,52 @@
             destY === y;
 
           if (!isWallCell) {
-            const clusterId = getClusterId(seed, x, y);
-            cell.classList.add("map-cell--cluster-" + clusterId);
-          }
-
-          if (isWallCell) {
-            cell.classList.remove(
-              "map-cell--cluster-0",
-              "map-cell--cluster-1",
-              "map-cell--cluster-2",
-              "map-cell--cluster-3",
-              "map-cell--cluster-4",
-              "map-cell--cluster-5"
-            );
+            const cid = getClusterId(seed, x, y);
+            cell.classList.add("map-cell--cluster-" + cid);
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "map-cell-label";
+            labelSpan.textContent = isGoal ? "★" : clusterLabel(cid);
+            cell.appendChild(labelSpan);
+          } else {
             cell.classList.add("map-cell--wall");
+            if (isGoal) {
+              const labelSpan = document.createElement("span");
+              labelSpan.className = "map-cell-label";
+              labelSpan.textContent = "★";
+              cell.appendChild(labelSpan);
+            }
           }
 
-          const labelSpan = document.createElement("span");
-          labelSpan.className = "map-cell-label";
-
-          let label = "";
-          if (isA) label = arrowForDirection(playerA?.direction);
-          if (isB) label = arrowForDirection(playerB?.direction);
-          if (isGoal) label = "★";
-
-          labelSpan.textContent = label;
-          cell.appendChild(labelSpan);
-
-          // 視野（只標示玩家 A 的 2×2 格）
           if (fovSet && fovSet.has(x + "," + y)) {
             cell.classList.add("map-cell--fov");
           }
 
-          if (isA) cell.classList.add("map-cell--player-a");
-          if (isB) cell.classList.add("map-cell--player-b");
-          if (isGoal) cell.classList.add("map-cell--goal");
+          if (isGoal) {
+            cell.classList.add("map-cell--goal");
+          }
 
           mapGridEl.appendChild(cell);
         }
       }
+
+      // 玩家圓點：畫在交叉點（格線交叉處）
+      function drawPlayerDot(pos, player, cls) {
+        if (pos.ix === null || pos.iy === null) return;
+        const dot = document.createElement("div");
+        dot.className = "player-dot " + cls;
+
+        // 交叉點 (ix,iy) → 左上為 (0, mapSize)，右下為 (mapSize,0)
+        const leftPercent = (pos.ix / mapSize) * 100;
+        const topPercent = ((mapSize - pos.iy) / mapSize) * 100;
+
+        dot.style.left = leftPercent + "%";
+        dot.style.top = topPercent + "%";
+        dot.textContent = arrowForDirection(player?.direction);
+        playerLayerEl.appendChild(dot);
+      }
+
+      drawPlayerDot(posA, playerA, "player-dot-a");
+      drawPlayerDot(posB, playerB, "player-dot-b");
     }
 
     // 啟動輪詢
