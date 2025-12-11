@@ -1,5 +1,5 @@
 // js/viewer.js
-// 迷路追蹤器 觀眾端 Viewer（交叉點 + 2×2 視野 + 全圖 + 群集文字）
+// 迷路追蹤器 觀眾端 Viewer（交叉點 + 2×2 視野 + 全圖 + 群集顏色）
 
 (function () {
   const SUPABASE_URL = "https://njrsyuluozjgxgucleci.supabase.co";
@@ -44,7 +44,7 @@
     } catch (_) {}
   }
 
-  // hash：優先用 shopName.js 的 hashToInt
+  // 優先用 shopName.js 的 hashToInt
   function hashToIntSafe(str) {
     if (typeof window.hashToInt === "function") {
       return window.hashToInt(str);
@@ -63,11 +63,6 @@
     const cy = Math.floor(y / block);
     const g = hashToIntSafe(seed + ":cluster:" + cx + ":" + cy);
     return g % 6; // 0..5 → 六個群集
-  }
-
-  function clusterLabel(id) {
-    const labels = ["A", "B", "C", "D", "E", "F"];
-    return labels[id] || "?";
   }
 
   // 終點：由 seed + room.id 決定（除非 DB 已有 goal_x/goal_y）
@@ -97,64 +92,53 @@
     return { ix, iy };
   }
 
-  // 與玩家端一致：從交叉點計算前方 2×2 視野格
-  // dir: 0=北,1=東,2=南,3=西
-  function getFovCells(ix, iy, dir) {
-    if (ix === null || iy === null) return null;
+  // 以「南方 dir=2」為基準的 2×2 視野 offsets（交叉點為原點）
+  // 這組是目前你說「南方正確」時的格子分佈。
+  const BASE_FOV_OFFSETS_SOUTH = [
+    { dx: 0, dy: -1 },
+    { dx: -1, dy: -1 },
+    { dx: 0, dy: -2 },
+    { dx: -1, dy: -2 }
+  ];
 
-    if (dir === 0) {
-      // 北：上方兩列（視為 y+ 方向）
-      return {
-        leftNear: { x: ix - 1, y: iy + 1 },
-        rightNear: { x: ix, y: iy + 1 },
-        leftFar: { x: ix - 1, y: iy + 2 },
-        rightFar: { x: ix, y: iy + 2 }
-      };
-    } else if (dir === 1) {
-      // 東：右邊兩列
-      return {
-        leftNear: { x: ix + 1, y: iy + 1 }, // 右上
-        rightNear: { x: ix + 1, y: iy }, // 右下
-        leftFar: { x: ix + 2, y: iy + 1 },
-        rightFar: { x: ix + 2, y: iy }
-      };
-    } else if (dir === 2) {
-      // 南：下方兩列（視為 y- 方向）
-      return {
-        leftNear: { x: ix, y: iy - 1 },
-        rightNear: { x: ix - 1, y: iy - 1 },
-        leftFar: { x: ix, y: iy - 2 },
-        rightFar: { x: ix - 1, y: iy - 2 }
-      };
-    } else {
-      // 西：左邊兩列
-      return {
-        leftNear: { x: ix - 1, y: iy },
-        rightNear: { x: ix - 1, y: iy + 1 },
-        leftFar: { x: ix - 2, y: iy },
-        rightFar: { x: ix - 2, y: iy + 1 }
-      };
+  // 對 offsets 做 90° 逆時針旋轉若干次
+  function rotateOffsetCCW(dx, dy, steps) {
+    let x = dx;
+    let y = dy;
+    const s = ((steps % 4) + 4) % 4;
+    for (let i = 0; i < s; i++) {
+      const nx = -y;
+      const ny = x;
+      x = nx;
+      y = ny;
     }
+    return { dx: x, dy: y };
   }
 
+  // 根據 direction（0/1/2/3）把南方基準 offsets 旋轉出各方向
+  // 假設 direction 編碼順序為 0=北,1=東,2=南,3=西
   function buildFovSet(player, mapSize) {
     const { ix, iy } = getPlayerIntersection(player);
-    const dir = Number.isInteger(player?.direction) ? player.direction : 0;
-    const f = getFovCells(ix, iy, dir);
-    const set = new Set();
-    if (!f) return set;
+    if (ix === null || iy === null) return new Set();
 
-    const cells = [f.leftNear, f.rightNear, f.leftFar, f.rightFar];
-    for (const c of cells) {
-      if (!c) continue;
-      if (
-        c.x < 0 ||
-        c.x >= mapSize ||
-        c.y < 0 ||
-        c.y >= mapSize
-      )
-        continue;
-      set.add(c.x + "," + c.y);
+    const dir = Number.isInteger(player?.direction) ? player.direction : 2;
+
+    // dir=2 南 → 0 步；dir=1 東 → 相對南向逆時針 3 步；dir=0 北 → 2 步；dir=3 西 → 1 步
+    // 這裡根據標準順序做旋轉，如果你的方向編碼有偏移，只需要在這裡調整 steps 對應。
+    let stepsFromSouth;
+    if (dir === 2) stepsFromSouth = 0;       // 南
+    else if (dir === 1) stepsFromSouth = 3;  // 東
+    else if (dir === 0) stepsFromSouth = 2;  // 北
+    else if (dir === 3) stepsFromSouth = 1;  // 西
+    else stepsFromSouth = 0;
+
+    const set = new Set();
+    for (const base of BASE_FOV_OFFSETS_SOUTH) {
+      const r = rotateOffsetCCW(base.dx, base.dy, stepsFromSouth);
+      const x = ix + r.dx;
+      const y = iy + r.dy;
+      if (x < 0 || x >= mapSize || y < 0 || y >= mapSize) continue;
+      set.add(x + "," + y);
     }
     return set;
   }
@@ -431,8 +415,22 @@
       updateNearbyShops(seed, map, mapSize, posA, playerAShopsEl);
       updateNearbyShops(seed, map, mapSize, posB, playerBShopsEl);
 
-      const fovSet = buildFovSet(playerA, mapSize);
-      renderMap(seed, map, mapSize, posA, posB, playerA, playerB, destX, destY, fovSet);
+      const fovSetA = buildFovSet(playerA, mapSize);
+      const fovSetB = buildFovSet(playerB, mapSize);
+      const fovUnion = new Set([...fovSetA, ...fovSetB]);
+
+      renderMap(
+        seed,
+        map,
+        mapSize,
+        posA,
+        posB,
+        playerA,
+        playerB,
+        destX,
+        destY,
+        fovUnion
+      );
     }
 
     function updateNearbyShops(seed, map, mapSize, pos, listEl) {
@@ -521,13 +519,6 @@
       // 全圖顯示
       mapGridEl.style.gridTemplateColumns = `repeat(${mapSize}, 1fr)`;
 
-      // 背景格線：map_size 等分
-      const step = 100 / mapSize;
-      mapGridEl.style.backgroundImage =
-        "linear-gradient(to right, rgba(255,255,255,0.15) 1px, transparent 1px)," +
-        "linear-gradient(to top, rgba(255,255,255,0.15) 1px, transparent 1px)";
-      mapGridEl.style.backgroundSize = `${step}% ${step}%`;
-
       const hasIsWall = typeof window.isWall === "function";
 
       for (let y = mapSize - 1; y >= 0; y--) {
@@ -545,18 +536,8 @@
           if (!isWallCell) {
             const cid = getClusterId(seed, x, y);
             cell.classList.add("map-cell--cluster-" + cid);
-            const labelSpan = document.createElement("span");
-            labelSpan.className = "map-cell-label";
-            labelSpan.textContent = isGoal ? "★" : clusterLabel(cid);
-            cell.appendChild(labelSpan);
           } else {
             cell.classList.add("map-cell--wall");
-            if (isGoal) {
-              const labelSpan = document.createElement("span");
-              labelSpan.className = "map-cell-label";
-              labelSpan.textContent = "★";
-              cell.appendChild(labelSpan);
-            }
           }
 
           if (fovSet && fovSet.has(x + "," + y)) {
@@ -565,6 +546,10 @@
 
           if (isGoal) {
             cell.classList.add("map-cell--goal");
+            const labelSpan = document.createElement("span");
+            labelSpan.className = "map-cell-label";
+            labelSpan.textContent = "★";
+            cell.appendChild(labelSpan);
           }
 
           mapGridEl.appendChild(cell);
@@ -577,7 +562,7 @@
         const dot = document.createElement("div");
         dot.className = "player-dot " + cls;
 
-        // 交叉點 (ix,iy) → 左上為 (0, mapSize)，右下為 (mapSize,0)
+        // 左下角 (0,0)，右上角 (mapSize, mapSize)
         const leftPercent = (pos.ix / mapSize) * 100;
         const topPercent = ((mapSize - pos.iy) / mapSize) * 100;
 
