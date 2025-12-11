@@ -5,7 +5,6 @@
   <title>迷路追蹤器 觀眾端 Viewer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-  <!-- 如未來有獨立 viewer.css，可保留這行；目前主要用內嵌樣式 -->
   <link rel="stylesheet" href="/css/viewer.css" />
 
   <style>
@@ -80,7 +79,7 @@
       color: #ffd5d8;
       border: 1px solid rgba(255, 120, 120, 0.6);
       font-size: 0.9rem;
-      display: none; /* 由 JS 控制 */
+      display: none;
     }
 
     .layout {
@@ -128,10 +127,9 @@
       line-height: 1.5;
     }
 
-    /* 地圖格子 */
     .map-grid {
       display: grid;
-      grid-template-columns: repeat(9, 1fr); /* 會被 JS 覆蓋為 25 或 map_size */
+      grid-template-columns: repeat(9, 1fr);
       gap: 2px;
       margin-top: 8px;
       border-radius: 8px;
@@ -152,9 +150,12 @@
       font-size: 0.75rem;
     }
 
-    /* 牆壁格 */
     .map-cell--wall {
-      background: rgba(0, 0, 0, 0.7);
+      background: rgba(0, 0, 0, 0.75);
+    }
+
+    .map-cell--fov {
+      box-shadow: 0 0 0 2px rgba(80, 200, 255, 0.45) inset;
     }
 
     .map-cell-label {
@@ -170,18 +171,18 @@
     }
 
     .map-cell--player-a {
-      background: rgba(80, 200, 255, 0.7);
+      background: rgba(80, 200, 255, 0.8);
       font-weight: 600;
     }
 
     .map-cell--player-b {
-      background: rgba(255, 150, 70, 0.7);
+      background: rgba(255, 150, 70, 0.8);
       font-weight: 600;
     }
 
-    .map-cell--destination {
-      background: rgba(160, 255, 120, 0.8);
-      font-weight: 600;
+    .map-cell--goal {
+      background: rgba(255, 230, 120, 0.9);
+      font-weight: 700;
     }
 
     .legend {
@@ -213,14 +214,14 @@
       background: rgba(255, 150, 70, 0.8);
     }
 
-    .legend-destination {
-      background: rgba(160, 255, 120, 0.9);
+    .legend-goal {
+      background: rgba(255, 230, 120, 0.9);
     }
 
-    .legend-shop {
+    .legend-fov {
       background: transparent;
       border-radius: 3px;
-      border: 2px solid rgba(255, 255, 255, 0.7);
+      border: 2px solid rgba(80, 200, 255, 0.8);
     }
 
     .status-list,
@@ -248,32 +249,26 @@
   <div class="viewer-wrapper">
     <header>
       <h1>迷路追蹤器 觀眾端 Viewer</h1>
-      <div class="subtitle">顯示玩家位置、附近店舖與終點（只讀投影畫面）</div>
+      <div class="subtitle">顯示玩家位置、面向、視野、附近店舖與終點</div>
     </header>
 
     <main>
-      <!-- 錯誤訊息 -->
       <div id="viewer-error" class="error-bar"></div>
 
-      <!-- 主內容（無 room 時由 JS 隱藏） -->
       <section id="viewer-main">
-        <!-- 房間資訊 -->
         <div class="info-row">
           <span class="badge-label">房間 Room</span>
           <span class="room-code" id="room-code">---</span>
         </div>
 
         <div class="layout">
-          <!-- 左邊：地圖 -->
           <section class="panel">
             <div class="panel-header">
               <div class="panel-title">地圖</div>
               <div class="panel-tag">Map View（以玩家 A 為中心）</div>
             </div>
             <div class="panel-body">
-              <div id="map-grid" class="map-grid">
-                <!-- 由 viewer.js 動態產生 -->
-              </div>
+              <div id="map-grid" class="map-grid"></div>
               <div class="legend">
                 <div class="legend-item">
                   <span class="legend-color legend-player-a"></span><span>玩家 A</span>
@@ -282,34 +277,30 @@
                   <span class="legend-color legend-player-b"></span><span>玩家 B</span>
                 </div>
                 <div class="legend-item">
-                  <span class="legend-color legend-destination"></span><span>終點</span>
+                  <span class="legend-color legend-goal"></span><span>終點 ★</span>
                 </div>
                 <div class="legend-item">
-                  <span class="legend-color legend-shop"></span><span>店舖（附近列表顯示）</span>
+                  <span class="legend-color legend-fov"></span><span>玩家視野</span>
                 </div>
               </div>
             </div>
           </section>
 
-          <!-- 右邊：玩家狀態＋終點／附近店舖 -->
           <section class="panel">
             <div class="panel-header">
               <div class="panel-title">遊戲狀態</div>
               <div class="panel-tag">Game Progress</div>
             </div>
             <div class="panel-body">
-              <!-- 玩家 A -->
               <h3 style="margin: 4px 0 2px; font-size: 0.9rem;">玩家 A</h3>
               <div id="player-a-status">尚未有玩家資料</div>
               <ul id="player-a-shops" class="shops-list"></ul>
 
-              <!-- 玩家 B -->
               <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">玩家 B</h3>
               <div id="player-b-status">尚未有玩家資料</div>
               <ul id="player-b-shops" class="shops-list"></ul>
 
-              <!-- 終點 -->
-              <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">目的地</h3>
+              <h3 style="margin: 10px 0 2px; font-size: 0.9rem;">終點</h3>
               <div id="destination-status">尚未設定</div>
               <ul id="destination-extra" class="status-list"></ul>
             </div>
@@ -323,13 +314,11 @@
     </footer>
   </div>
 
-  <!-- Supabase CDN（必須在 supabaseClient.js 前） -->
+  <!-- Supabase CDN -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <!-- 初始化 Supabase client：建立 window._supabase -->
-  <script src="js/supabaseClient.js"></script>
-  <!-- 店舖名稱與地圖生成工具：getShopName / generateMap / isWall -->
+  <!-- 店舖 / 地圖生成工具：提供 generateMap / getShopName / isWall -->
   <script src="js/shopName.js"></script>
-  <!-- 觀眾端邏輯 -->
+  <!-- 觀眾端主程式 -->
   <script src="js/viewer.js"></script>
 </body>
 </html>
